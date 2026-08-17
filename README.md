@@ -24,13 +24,20 @@ tutorial notebooks use:
 - **Differentiation and arrays**: `ADTypes`, `DifferentiationInterface`, `ForwardDiff`,
   `FiniteDiff`, `StaticArrays`, `TypedTables`
 - **Optimization**: `Optim`, `NLSolversBase`, `OptimizationOptimJL`, `OptimizationLBFGSB`
-- **Plotting and analysis**: `CairoMakie`, `Plots`, `LaTeXStrings`, `Distributions`
+- **Plotting and analysis**: `CairoMakie`, `GLMakie`, `Plots`, `LaTeXStrings`, `Distributions`
 - **Interactive tooling**: `Revise`, `Infiltrator` (both loaded automatically by
   `meta/startup.jl` in interactive sessions)
 
 Julia standard libraries used by the tutorials (`LinearAlgebra`, `Statistics`, `Random`,
 `Printf`, `SparseArrays`, `DelimitedFiles`) are always available and are therefore not listed
 in `Project.toml`.
+
+Two Makie backends are bundled. `CairoMakie` is the default used by the tutorial notebooks: it
+renders static PNG/SVG/PDF output and needs no graphics hardware. `GLMakie` adds interactive,
+zoomable, 3D-capable windows, but requires a working OpenGL 3.3 context, so `using GLMakie`
+will fail on headless machines, over an SSH session without display forwarding, and in some
+containers and virtual machines — use `CairoMakie` there. When both are loaded, whichever was
+activated last (`CairoMakie.activate!()` / `GLMakie.activate!()`) receives the plots.
 
 `Manifest.toml` records the exact resolved versions. Both it and `meta/Manifest.toml` were
 resolved with Julia 1.11, the minimum version this distribution supports, and AppBundler takes
@@ -86,13 +93,17 @@ julia --project=meta -e 'using Pkg; Pkg.instantiate()'
 Then perform the build:
 
 ```bash
-julia --project=meta -e 'using AppBundler; AppBundler.main(ARGS)' build . --build-dir=build --selfsign
+julia --project=meta -e 'import AppBundler; AppBundler.main(ARGS)' build . --build-dir=build --selfsign
 ```
 
 Everything after the `-e` expression is passed through to AppBundler's command line. On Julia
 1.12 or later the shorter `julia --project=meta -m AppBundler build . --build-dir=build
 --selfsign` form works as well, but `-m` does not exist in 1.11, so the invocation above is
 the portable one. Pass `AppBundler.main(["--help"])` to see all build options.
+
+Use `import AppBundler`, not `using AppBundler`. AppBundler exports `main` and marks it with
+`@main`, so `using` brings `main` into `Main` and Julia's entry point invokes it a second time
+with the same arguments once the `-e` expression returns — building the whole bundle twice.
 
 This creates build artifacts in the `build` directory. By default the bundle targets the host
 platform.
@@ -106,7 +117,7 @@ from the Actions tab.
 Bundles for other platforms are created with command options:
 
 ```bash
-julia --project=meta -e 'using AppBundler; AppBundler.main(ARGS)' build . --build-dir=build --target-arch=aarch64 --target-bundle=dmg -Djuliaimg_precompile=false --selfsign
+julia --project=meta -e 'import AppBundler; AppBundler.main(ARGS)' build . --build-dir=build --target-arch=aarch64 --target-bundle=dmg -Djuliaimg_precompile=false --selfsign
 ```
 
 This creates a bundle for the specified platform where precompilation happens on the user's
@@ -119,6 +130,20 @@ Edit `Project.toml`, re-resolve, and commit the updated `Manifest.toml`:
 ```bash
 julia --project=. -e 'using Pkg; Pkg.update()'
 ```
+
+Use Julia 1.11 for this, for the reason given under [Julia versions](#julia-versions).
+
+## Patches
+
+Files under `meta/patches/<Package>/…` are copied over the corresponding files of the bundled
+packages during the build. One patch is currently applied:
+
+- `meta/patches/GLMakie/src/precompiles.jl` — GLMakie's `@setup_workload` block opens an
+  OpenGL screen, which is not available while packages are precompiled into the bundle. The
+  patched copy comments that block out and keeps the static `precompile()` statements. It was
+  generated from GLMakie v0.13.13 and must be regenerated when GLMakie is upgraded: copy
+  `src/precompiles.jl` from the new version and comment out the `macro compile` definition
+  and the `let @setup_workload … end` block.
 
 Bump `version` in `Project.toml` (the distribution uses a `YY.M.D` scheme) and tag a release
 to publish new installers.
