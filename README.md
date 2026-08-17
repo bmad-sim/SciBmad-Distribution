@@ -31,7 +31,6 @@ notebooks use, and the packages requested in
   and `LaTeXStrings`
 - **Data and utilities**: `DataFrames`, `Graphs`, `JSON`, `SpecialFunctions`,
   `ReferenceFrameRotations`
-- **Notebooks**: `IJulia`
 - **Interactive tooling**: `Revise`, `Infiltrator` (both loaded automatically by
   `meta/startup.jl` in interactive sessions)
 
@@ -48,16 +47,25 @@ renders into a browser and is the backend to use from a notebook served over the
 several are loaded, whichever was activated last (`CairoMakie.activate!()` and friends)
 receives the plots.
 
-`IJulia` is bundled but needs a Jupyter installation and a registered kernel, neither of which
-ships inside the bundle. Run `using IJulia; IJulia.installkernel("SciBmad")` once to point a
-kernel at the bundled Julia; `IJulia.notebook()` will offer to install Jupyter through Conda if
-none is found.
+`IJulia` and `PythonCall` are the two packages from
+[issue #1](https://github.com/bmad-sim/SciBmad-Distribution/issues/1) that are **not** bundled.
 
-`PythonCall` is the one package from
-[issue #1](https://github.com/bmad-sim/SciBmad-Distribution/issues/1) that is **not** bundled.
-It cannot be: CondaPkg resolves a Python environment while packages are precompiled into the
-bundle, at which point the `pixi` and `micromamba` artifacts it needs have not been installed
-yet, so `BeamlinesPythonCallExt`, `SciMLBasePythonCallExt`, `IJuliaPythonCallExt` and
+`IJulia` cannot be: it refuses to load unless `deps/deps.jl` exists, and that file is written by
+`Pkg.build("IJulia")`. AppBundler copies pristine package trees into the bundle and never runs
+`deps/build.jl`, so precompiling `IJulia` into the bundle aborts the build with `IJulia not
+properly installed. Please run Pkg.build("IJulia")`. A generated `deps.jl` would not help
+either: it hardcodes the build machine's Jupyter path, and neither Jupyter nor a registered
+kernel ships inside the bundle. Users who want notebooks can add it to their own environment
+inside the distribution, then register a kernel pointing at the bundled Julia:
+
+```julia
+import Pkg; Pkg.add("IJulia")
+using IJulia; IJulia.installkernel("SciBmad")
+```
+
+`PythonCall` cannot be bundled either: CondaPkg resolves a Python environment while packages are
+precompiled into the bundle, at which point the `pixi` and `micromamba` artifacts it needs have
+not been installed yet, so `BeamlinesPythonCallExt`, `SciMLBasePythonCallExt` and
 `DimensionalDataPythonCallExt` all fail with `InitError: Python executable … does not exist`
 and the build aborts. Bundling a Python environment would also tie each bundle to the build
 machine's platform, breaking the cross-architecture jobs. Users who need it can add it to their
