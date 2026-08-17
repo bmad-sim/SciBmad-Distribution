@@ -16,6 +16,9 @@ jobs:
     name: Build ${{ matrix.os }}-${{ matrix.arch }}
     runs-on: ${{ matrix.runner }}
     strategy:
+      # The x86_64 targets take the longest and are the ones that have been failing,
+      # so a shared fail-fast keeps cancelling them before they can report anything.
+      fail-fast: false
       matrix:
         include:
           - runner: macos-latest
@@ -44,6 +47,19 @@ jobs:
       - uses: julia-actions/cache@v3
       - name: Install dependencies
         run: julia --project=meta -e 'using Pkg; Pkg.instantiate()'
+      # The linux-x86_64 runner has twice been killed mid-`Precompiling SciBmad` with
+      # no Julia error, taking the runner agent with it (its `if: always()` steps never
+      # ran), which is what an OOM kill looks like from the outside. x86_64 bundles are
+      # compiled for three CPU targets at once, so they need far more memory than the
+      # single-target aarch64 ones, which pass. 16G of extra swap absorbs the peak.
+      - name: Add swap space
+        if: matrix.os == 'linux'
+        run: |
+          sudo fallocate -l 16G /swapfile-extra
+          sudo chmod 600 /swapfile-extra
+          sudo mkswap /swapfile-extra
+          sudo swapon /swapfile-extra
+          swapon --show
       # A bundle build runs for ~40 minutes and writes several GB into the staging
       # area, so a job that dies without a Julia error is usually the runner running
       # out of disk or memory. Reported before and after the build so a killed job
@@ -57,11 +73,23 @@ jobs:
             macOS) vm_stat && sysctl -n hw.memsize ;;
             Windows) powershell -c "Get-CimInstance Win32_OperatingSystem | Format-List FreePhysicalMemory,TotalVisibleMemorySize" ;;
           esac
+      # Split from the build below only so the Linux jobs can sample memory while the
+      # build runs. The samples are streamed into this step's own log rather than
+      # reported afterwards, because a runner taken down by the OOM killer never gets
+      # to run another step, while log lines already written survive.
+      - name: Build (with memory sampling)
+        if: matrix.os == 'linux'
+        run: |
+          (while true; do sleep 30; free -m | sed -n -e 2p -e 3p; done) &
+          sampler=$!
+          trap "kill $sampler 2>/dev/null || true" EXIT
+          ${{ matrix.xvfb && 'xvfb-run -s ''-screen 0 1024x768x24''' || '' }} julia --project=meta -e 'import AppBundler; AppBundler.main(ARGS)' build . --build-dir=build --target-arch=${{ matrix.arch }} --password=
       - name: Build
+        if: matrix.os != 'linux'
         env:
           PASSWORD: ${{ matrix.os == 'macos' && secrets.MACOS_PFX_PASSWORD || matrix.os == 'windows' && secrets.WINDOWS_PFX_PASSWORD || '' }}
         run: |
-          ${{ matrix.xvfb && 'xvfb-run -s ''-screen 0 1024x768x24''' || '' }} julia --project=meta -e 'import AppBundler; AppBundler.main(ARGS)' build . --build-dir=build --target-arch=${{ matrix.arch }} --password=${{ env.PASSWORD }}
+          julia --project=meta -e 'import AppBundler; AppBundler.main(ARGS)' build . --build-dir=build --target-arch=${{ matrix.arch }} --password=${{ env.PASSWORD }}
       - name: Report free disk and memory (after build)
         if: always()
         shell: bash
