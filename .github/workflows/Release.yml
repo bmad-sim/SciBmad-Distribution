@@ -41,15 +41,38 @@ jobs:
       - uses: julia-actions/setup-julia@v2
         with:
           version: '1.11'
-      - uses: julia-actions/cache@v1
+      - uses: julia-actions/cache@v3
       - name: Install dependencies
         run: julia --project=meta -e 'using Pkg; Pkg.instantiate()'
+      # A bundle build runs for ~40 minutes and writes several GB into the staging
+      # area, so a job that dies without a Julia error is usually the runner running
+      # out of disk or memory. Reported before and after the build so a killed job
+      # still leaves evidence behind.
+      - name: Report free disk and memory (before build)
+        shell: bash
+        run: |
+          df -h
+          case "${{ runner.os }}" in
+            Linux) free -h ;;
+            macOS) vm_stat && sysctl -n hw.memsize ;;
+            Windows) powershell -c "Get-CimInstance Win32_OperatingSystem | Format-List FreePhysicalMemory,TotalVisibleMemorySize" ;;
+          esac
       - name: Build
         env:
           PASSWORD: ${{ matrix.os == 'macos' && secrets.MACOS_PFX_PASSWORD || matrix.os == 'windows' && secrets.WINDOWS_PFX_PASSWORD || '' }}
         run: |
           ${{ matrix.xvfb && 'xvfb-run -s ''-screen 0 1024x768x24''' || '' }} julia --project=meta -e 'import AppBundler; AppBundler.main(ARGS)' build . --build-dir=build --target-arch=${{ matrix.arch }} --password=${{ env.PASSWORD }}
-      
+      - name: Report free disk and memory (after build)
+        if: always()
+        shell: bash
+        run: |
+          df -h
+          case "${{ runner.os }}" in
+            Linux) free -h ;;
+            macOS) vm_stat && sysctl -n hw.memsize ;;
+            Windows) powershell -c "Get-CimInstance Win32_OperatingSystem | Format-List FreePhysicalMemory,TotalVisibleMemorySize" ;;
+          esac
+
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.os }}-${{ matrix.arch }}
