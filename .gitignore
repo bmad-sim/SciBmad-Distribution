@@ -19,3 +19,7 @@ docs/site/
 
 **/build
 **/.DS_Store
+
+# Conda environment CondaPkg creates in the active project if PythonCall is added locally
+# (PythonCall is deliberately not a dependency; see README)
+.CondaPkg/
