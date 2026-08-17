@@ -15,16 +15,23 @@ recompiled.
 
 ## What is included
 
-The dependency list is the union of what `SciBmad` itself provides and what the ring design
-tutorial notebooks use:
+The dependency list covers what `SciBmad` itself provides, what the ring design tutorial
+notebooks use, and the packages requested in
+[issue #1](https://github.com/bmad-sim/SciBmad-Distribution/issues/1):
 
 - **SciBmad core**: `SciBmad`, `Beamlines`, `BeamTracking`, `NonlinearNormalForm`, `GTPSA`,
   `TPSAInterface`, `AtomicAndPhysicalConstants`, `FundamentalFrequencies`, `BatchSolve`,
   `KernelAbstractions`
 - **Differentiation and arrays**: `ADTypes`, `DifferentiationInterface`, `ForwardDiff`,
-  `FiniteDiff`, `StaticArrays`, `TypedTables`
-- **Optimization**: `Optim`, `NLSolversBase`, `OptimizationOptimJL`, `OptimizationLBFGSB`
-- **Plotting and analysis**: `CairoMakie`, `GLMakie`, `Plots`, `LaTeXStrings`, `Distributions`
+  `ReverseDiff`, `FiniteDiff`, `StaticArrays`, `TypedTables`, `PreallocationTools`
+- **Optimization and solvers**: `Optim`, `NLSolversBase`, `OptimizationOptimJL`,
+  `OptimizationLBFGSB`, `NonlinearSolve`, `Metaheuristics`, `Sobol`
+- **Statistics**: `Distributions`, `Turing`
+- **Plotting**: `Makie` with the `CairoMakie`, `GLMakie` and `WGLMakie` backends, plus `Plots`
+  and `LaTeXStrings`
+- **Data and utilities**: `DataFrames`, `Graphs`, `JSON`, `SpecialFunctions`,
+  `ReferenceFrameRotations`
+- **Notebooks**: `IJulia`
 - **Interactive tooling**: `Revise`, `Infiltrator` (both loaded automatically by
   `meta/startup.jl` in interactive sessions)
 
@@ -32,12 +39,33 @@ Julia standard libraries used by the tutorials (`LinearAlgebra`, `Statistics`, `
 `Printf`, `SparseArrays`, `DelimitedFiles`) are always available and are therefore not listed
 in `Project.toml`.
 
-Two Makie backends are bundled. `CairoMakie` is the default used by the tutorial notebooks: it
-renders static PNG/SVG/PDF output and needs no graphics hardware. `GLMakie` adds interactive,
-zoomable, 3D-capable windows, but requires a working OpenGL 3.3 context, so `using GLMakie`
-will fail on headless machines, over an SSH session without display forwarding, and in some
-containers and virtual machines — use `CairoMakie` there. When both are loaded, whichever was
-activated last (`CairoMakie.activate!()` / `GLMakie.activate!()`) receives the plots.
+Three Makie backends are bundled. `CairoMakie` is the default used by the tutorial notebooks:
+it renders static PNG/SVG/PDF output and needs no graphics hardware. `GLMakie` adds
+interactive, zoomable, 3D-capable windows, but requires a working OpenGL 3.3 context, so
+`using GLMakie` will fail on headless machines, over an SSH session without display
+forwarding, and in some containers and virtual machines — use `CairoMakie` there. `WGLMakie`
+renders into a browser and is the backend to use from a notebook served over the network. When
+several are loaded, whichever was activated last (`CairoMakie.activate!()` and friends)
+receives the plots.
+
+`IJulia` is bundled but needs a Jupyter installation and a registered kernel, neither of which
+ships inside the bundle. Run `using IJulia; IJulia.installkernel("SciBmad")` once to point a
+kernel at the bundled Julia; `IJulia.notebook()` will offer to install Jupyter through Conda if
+none is found.
+
+`PythonCall` is the one package from
+[issue #1](https://github.com/bmad-sim/SciBmad-Distribution/issues/1) that is **not** bundled.
+It cannot be: CondaPkg resolves a Python environment while packages are precompiled into the
+bundle, at which point the `pixi` and `micromamba` artifacts it needs have not been installed
+yet, so `BeamlinesPythonCallExt`, `SciMLBasePythonCallExt`, `IJuliaPythonCallExt` and
+`DimensionalDataPythonCallExt` all fail with `InitError: Python executable … does not exist`
+and the build aborts. Bundling a Python environment would also tie each bundle to the build
+machine's platform, breaking the cross-architecture jobs. Users who need it can add it to their
+own environment inside the distribution, where CondaPkg has a writable project to work in:
+
+```julia
+import Pkg; Pkg.add("PythonCall")
+```
 
 `Manifest.toml` records the exact resolved versions. Both it and `meta/Manifest.toml` were
 resolved with Julia 1.11, the minimum version this distribution supports, and AppBundler takes
