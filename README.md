@@ -1,9 +1,7 @@
 # SciBmad-Distribution
 
 A Julia distribution that ships [SciBmad](https://github.com/bmad-sim/SciBmad) — the Julia
-toolkit for charged particle beam dynamics — together with everything needed to work through
-the [SciBmad Ring Design tutorial](https://github.com/bmad-sim/Tutorial-SciBmad-Ring-Design),
-precompiled and ready to run. Install it, launch Julia, and `using SciBmad` returns
+toolkit for charged particle beam dynamics. Install it, launch Julia, and `using SciBmad` returns
 immediately: no package installation, no first-use compilation wait. Additional packages can
 still be installed with `Pkg` without triggering recompilation of the bundled ones.
 
@@ -14,10 +12,6 @@ is bundled into the stdlib path of the shipped Julia so that they are never acci
 recompiled.
 
 ## What is included
-
-The dependency list covers what `SciBmad` itself provides, what the ring design tutorial
-notebooks use, and the packages requested in
-[issue #1](https://github.com/bmad-sim/SciBmad-Distribution/issues/1):
 
 - **SciBmad core**: `SciBmad`, `Beamlines`, `BeamTracking`, `NonlinearNormalForm`, `GTPSA`,
   `TPSAInterface`, `AtomicAndPhysicalConstants`, `FundamentalFrequencies`, `BatchSolve`,
@@ -46,34 +40,6 @@ forwarding, and in some containers and virtual machines — use `CairoMakie` the
 renders into a browser and is the backend to use from a notebook served over the network. When
 several are loaded, whichever was activated last (`CairoMakie.activate!()` and friends)
 receives the plots.
-
-`IJulia` and `PythonCall` are the two packages from
-[issue #1](https://github.com/bmad-sim/SciBmad-Distribution/issues/1) that are **not** bundled.
-
-`IJulia` cannot be: it refuses to load unless `deps/deps.jl` exists, and that file is written by
-`Pkg.build("IJulia")`. AppBundler copies pristine package trees into the bundle and never runs
-`deps/build.jl`, so precompiling `IJulia` into the bundle aborts the build with `IJulia not
-properly installed. Please run Pkg.build("IJulia")`. A generated `deps.jl` would not help
-either: it hardcodes the build machine's Jupyter path, and neither Jupyter nor a registered
-kernel ships inside the bundle. Users who want notebooks can add it to their own environment
-inside the distribution, then register a kernel pointing at the bundled Julia:
-
-```julia
-import Pkg; Pkg.add("IJulia")
-using IJulia; IJulia.installkernel("SciBmad")
-```
-
-`PythonCall` cannot be bundled either: CondaPkg resolves a Python environment while packages are
-precompiled into the bundle, at which point the `pixi` and `micromamba` artifacts it needs have
-not been installed yet, so `BeamlinesPythonCallExt`, `SciMLBasePythonCallExt` and
-`DimensionalDataPythonCallExt` all fail with `InitError: Python executable … does not exist`
-and the build aborts. Bundling a Python environment would also tie each bundle to the build
-machine's platform, breaking the cross-architecture jobs. Users who need it can add it to their
-own environment inside the distribution, where CondaPkg has a writable project to work in:
-
-```julia
-import Pkg; Pkg.add("PythonCall")
-```
 
 `Manifest.toml` records the exact resolved versions. Both it and `meta/Manifest.toml` were
 resolved with Julia 1.11, the minimum version this distribution supports, and AppBundler takes
@@ -118,6 +84,8 @@ These extra steps are avoidable with an investment in Windows and macOS code sig
 certificates. For Snap, the app can be submitted to the Snap Store so it can be installed
 through a GUI.
 
+# For Maintainers:
+
 ## Building
 
 Install Julia 1.11 or later and install the build dependencies:
@@ -147,17 +115,6 @@ platform.
 Release assets for all platforms are produced by the **Build Release Assets** GitHub Actions
 workflow, which runs automatically when a release is created and can also be started manually
 from the Actions tab.
-
-## Cross-platform builds
-
-Bundles for other platforms are created with command options:
-
-```bash
-julia --project=meta -e 'import AppBundler; AppBundler.main(ARGS)' build . --build-dir=build --target-arch=aarch64 --target-bundle=dmg -Djuliaimg_precompile=false --selfsign
-```
-
-This creates a bundle for the specified platform where precompilation happens on the user's
-system at first launch.
 
 ## Updating the package set
 
