@@ -45,15 +45,19 @@ jobs:
         with:
           version: '1.11'
       - uses: julia-actions/cache@v3
-      # `Pkg.build("PyCall")` is not redundant with `instantiate`. AppBundler depends on
-      # PyCall, whose generated `deps/deps.jl` hardcodes a libpython under `~/.julia/conda`.
-      # `julia-actions/cache` restores that `deps.jl` (in `~/.julia/packages`) and Pkg's
-      # record that PyCall is already built (in `~/.julia/scratchspaces`), but it does not
-      # cache `~/.julia/conda`. On a cache hit `instantiate` therefore skips the build and
-      # `import AppBundler` dies in PyCall's `__init__` with `could not load library …
-      # libpython3.13`. Rebuilding reinstalls the conda Python and costs ~40s.
+      # `Pkg.build()` is not redundant with `instantiate`. This dependency tree keeps its
+      # build products in `~/.julia/conda`: PyCall's generated `deps/deps.jl` hardcodes a
+      # libpython there, and AppBundler's `deps/build.jl` installs the `ds_store` Python
+      # module into it. `julia-actions/cache` restores the evidence that those builds
+      # happened -- `deps.jl` in `~/.julia/packages`, Pkg's build records in
+      # `~/.julia/scratchspaces` -- but it does not cache `~/.julia/conda` itself. On a
+      # cache hit `instantiate` therefore skips the builds and `import AppBundler` dies in
+      # a module `__init__`, either as `could not load library ... libpython3.13` or as
+      # `Failed to import Python module 'ds_store'`. Forcing every build, rather than the
+      # one that failed last, keeps the conda environment in step with the records that
+      # describe it. Costs ~40s against a build of roughly an hour.
       - name: Install dependencies
-        run: julia --project=meta -e 'using Pkg; Pkg.instantiate(); Pkg.build("PyCall")'
+        run: julia --project=meta -e 'using Pkg; Pkg.instantiate(); Pkg.build()'
       # The linux-x86_64 runner has twice been killed mid-`Precompiling SciBmad` with
       # no Julia error, taking the runner agent with it (its `if: always()` steps never
       # ran), which is what an OOM kill looks like from the outside. x86_64 bundles are
