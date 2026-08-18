@@ -84,8 +84,6 @@ These extra steps are avoidable with an investment in Windows and macOS code sig
 certificates. For Snap, the app can be submitted to the Snap Store so it can be installed
 through a GUI.
 
-# For Maintainers:
-
 ## Building
 
 Install Julia 1.11 or later and install the build dependencies:
@@ -115,6 +113,8 @@ platform.
 Release assets for all platforms are produced by the **Build Release Assets** GitHub Actions
 workflow, which runs automatically when a release is created and can also be started manually
 from the Actions tab.
+
+# For Maintainers:
 
 ## Updating the package set
 
