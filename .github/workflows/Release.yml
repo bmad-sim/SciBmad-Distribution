@@ -45,8 +45,15 @@ jobs:
         with:
           version: '1.11'
       - uses: julia-actions/cache@v3
+      # `Pkg.build("PyCall")` is not redundant with `instantiate`. AppBundler depends on
+      # PyCall, whose generated `deps/deps.jl` hardcodes a libpython under `~/.julia/conda`.
+      # `julia-actions/cache` restores that `deps.jl` (in `~/.julia/packages`) and Pkg's
+      # record that PyCall is already built (in `~/.julia/scratchspaces`), but it does not
+      # cache `~/.julia/conda`. On a cache hit `instantiate` therefore skips the build and
+      # `import AppBundler` dies in PyCall's `__init__` with `could not load library …
+      # libpython3.13`. Rebuilding reinstalls the conda Python and costs ~40s.
       - name: Install dependencies
-        run: julia --project=meta -e 'using Pkg; Pkg.instantiate()'
+        run: julia --project=meta -e 'using Pkg; Pkg.instantiate(); Pkg.build("PyCall")'
       # The linux-x86_64 runner has twice been killed mid-`Precompiling SciBmad` with
       # no Julia error, taking the runner agent with it (its `if: always()` steps never
       # ran), which is what an OOM kill looks like from the outside. x86_64 bundles are
