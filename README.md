@@ -27,10 +27,25 @@ recompiled.
   `ReferenceFrameRotations`
 - **Interactive tooling**: `Revise`, `Infiltrator` (both loaded automatically by
   `meta/startup.jl` in interactive sessions)
+- **Python interoperability**: `PythonCall`, together with the `Python_jll` interpreter it
+  runs against
 
 Julia standard libraries used by the tutorials (`LinearAlgebra`, `Statistics`, `Random`,
 `Printf`, `SparseArrays`, `DelimitedFiles`) are always available and are therefore not listed
 in `Project.toml`.
+
+`PythonCall` is bundled with a Python interpreter, so `using PythonCall` returns in about a
+second and needs neither a download nor a network connection. `meta/startup.jl` points it at
+the `Python_jll` interpreter inside the bundle and switches CondaPkg's environment management
+off; left to itself, PythonCall would try to resolve a Conda environment on first use, which
+would both impose the wait this distribution exists to avoid and fail outright, since it would
+have to write inside the read-only install directory. Packages can still be added to that
+interpreter from within the distribution with `CondaPkg` once it is pointed at a writable
+environment.
+
+Python_jll has no Windows build. On Windows, `meta/startup.jl` instead points CondaPkg at a
+writable directory beside the user's data, so the first `using PythonCall` downloads a Python
+environment once and works normally thereafter.
 
 Three Makie backends are bundled. `CairoMakie` is the default used by the tutorial notebooks:
 it renders static PNG/SVG/PDF output and needs no graphics hardware. `GLMakie` adds
@@ -44,24 +59,6 @@ receives the plots.
 `Manifest.toml` records the exact resolved versions. Both it and `meta/Manifest.toml` were
 resolved with Julia 1.11, the minimum version this distribution supports, and AppBundler takes
 the Julia version to ship inside the bundle from their `julia_version` field.
-
-## Julia versions
-
-Building works on Julia 1.11 and 1.12 alike. The host Julia only runs AppBundler itself:
-the bundled Julia, the packages copied into it, and their precompilation all come from
-`Manifest.toml`, so a build driven by 1.12 still produces a bundle containing Julia 1.11.7.
-
-Do **not** run `Pkg.resolve()` or `Pkg.update()` on this repository under a Julia newer than
-1.11. Doing so rewrites `julia_version` in `Manifest.toml` and would silently change the Julia
-shipped to users on the next release. This is why the release workflow pins `setup-julia` to
-`1.11`; use 1.11 for any package-set update.
-
-Using the repository as a development environment under 1.12 works but is slightly degraded:
-Pkg warns that the manifest was resolved by a different Julia version (and, because Pkg 1.12
-hashes `Project.toml` differently, wrongly reports the manifest as stale), and manifest entries
-for packages that are standard libraries in 1.11 but not in 1.12 — notably `MbedTLS_jll` — have
-no download recorded, so `MbedTLS`, `HTTP` and `FileIO`'s HTTP extension fail to precompile.
-The bundle is unaffected, since it ships 1.11.
 
 ## Installation
 
@@ -83,6 +80,26 @@ instructions for your platform:
 These extra steps are avoidable with an investment in Windows and macOS code signing
 certificates. For Snap, the app can be submitted to the Snap Store so it can be installed
 through a GUI.
+
+# For Maintainers:
+
+## Julia versions
+
+Building works on Julia 1.11 and 1.12 alike. The host Julia only runs AppBundler itself:
+the bundled Julia, the packages copied into it, and their precompilation all come from
+`Manifest.toml`, so a build driven by 1.12 still produces a bundle containing Julia 1.11.7.
+
+Do **not** run `Pkg.resolve()` or `Pkg.update()` on this repository under a Julia newer than
+1.11. Doing so rewrites `julia_version` in `Manifest.toml` and would silently change the Julia
+shipped to users on the next release. This is why the release workflow pins `setup-julia` to
+`1.11`; use 1.11 for any package-set update.
+
+Using the repository as a development environment under 1.12 works but is slightly degraded:
+Pkg warns that the manifest was resolved by a different Julia version (and, because Pkg 1.12
+hashes `Project.toml` differently, wrongly reports the manifest as stale), and manifest entries
+for packages that are standard libraries in 1.11 but not in 1.12 — notably `MbedTLS_jll` — have
+no download recorded, so `MbedTLS`, `HTTP` and `FileIO`'s HTTP extension fail to precompile.
+The bundle is unaffected, since it ships 1.11.
 
 ## Building
 
@@ -110,11 +127,17 @@ with the same arguments once the `-e` expression returns — building the whole 
 This creates build artifacts in the `build` directory. By default the bundle targets the host
 platform.
 
+Build with `CI` unset in the environment, and make sure any CI workflow clears it (`env -u CI
+julia ...`). AppBundler chooses how to compile packages into the bundle based on that variable
+(`JuliaImg.jl:93`): without it, it calls `Pkg.precompile`; with it, it loads every package with
+`import` instead. `import` runs each package's `__init__`, and PythonCall's `__init__` resolves
+a Conda environment, which fails inside the bundle. `Pkg.precompile` never runs `__init__`, so
+it compiles PythonCall and its extensions without needing a Python interpreter at build time.
+Set `JULIA_NUM_PRECOMPILE_TASKS` to bound the parallelism if the builder is short on memory.
+
 Release assets for all platforms are produced by the **Build Release Assets** GitHub Actions
 workflow, which runs automatically when a release is created and can also be started manually
 from the Actions tab.
-
-# For Maintainers:
 
 ## Updating the package set
 
@@ -129,7 +152,7 @@ Use Julia 1.11 for this, for the reason given under [Julia versions](#julia-vers
 ## Patches
 
 Files under `meta/patches/<Package>/…` are copied over the corresponding files of the bundled
-packages during the build. One patch is currently applied:
+packages during the build. Two patches are currently applied:
 
 - `meta/patches/GLMakie/src/precompiles.jl` — GLMakie's `@setup_workload` block opens an
   OpenGL screen, which is not available while packages are precompiled into the bundle. The
@@ -137,6 +160,16 @@ packages during the build. One patch is currently applied:
   generated from GLMakie v0.13.13 and must be regenerated when GLMakie is upgraded: copy
   `src/precompiles.jl` from the new version and comment out the `macro compile` definition
   and the `let @setup_workload … end` block.
+
+- `meta/patches/PythonCall/src/Core/juliacall.jl` — PythonCall locates its bundled `juliacall`
+  Python package through `ROOT_DIR`, which is `dirname(dirname(@__DIR__))` and is therefore
+  frozen at precompile time. AppBundler precompiles into a staging directory and the bundle is
+  installed somewhere else, so the recorded path no longer exists and `using PythonCall` fails
+  with `ModuleNotFoundError: No module named 'juliacall'`. The patched copy locates the package
+  through the load path instead, which follows the bundle wherever it is installed. It was
+  generated from PythonCall v0.9.35 and must be regenerated when PythonCall is upgraded: copy
+  `src/Core/juliacall.jl` from the new version and replace the two uses of `ROOT_DIR` inside
+  `init_juliacall` with the load-path lookup.
 
 Bump `version` in `Project.toml` (the distribution uses a `YY.M.D` scheme) and tag a release
 to publish new installers.
