@@ -94,12 +94,21 @@ jobs:
       # its extensions without needing a Python interpreter at build time. Deleting the
       # variable from Julia rather than from the shell keeps this identical on Windows,
       # where the default shell has no `env -u`.
+      # `JULIA_CONDAPKG_BACKEND=Null` is for Windows, the one platform with no
+      # Python_jll build: there the patch that points PythonCall at the bundled
+      # interpreter has nothing to point at, and PythonCall would resolve an empty
+      # Conda environment inside the staging tree and fail the same way. `Null` makes
+      # it use the runner's own `python`, which only has to satisfy `__init__` while
+      # packages compile -- nothing about it enters the bundle. On every other
+      # platform the patch sets this same value itself.
       # Split from the build below only so the Linux jobs can sample memory while the
       # build runs. The samples are streamed into this step's own log rather than
       # reported afterwards, because a runner taken down by the OOM killer never gets
       # to run another step, while log lines already written survive.
       - name: Build (with memory sampling)
         if: matrix.os == 'linux'
+        env:
+          JULIA_CONDAPKG_BACKEND: Null
         run: |
           (while true; do sleep 30; free -m | sed -n -e 2p -e 3p; done) &
           sampler=$!
@@ -109,6 +118,7 @@ jobs:
         if: matrix.os != 'linux'
         env:
           PASSWORD: ${{ matrix.os == 'macos' && secrets.MACOS_PFX_PASSWORD || matrix.os == 'windows' && secrets.WINDOWS_PFX_PASSWORD || '' }}
+          JULIA_CONDAPKG_BACKEND: Null
         run: |
           julia --project=meta -e 'delete!(ENV, "CI"); import AppBundler; AppBundler.main(ARGS)' build . --build-dir=build --target-arch=${{ matrix.arch }} --password=${{ env.PASSWORD }}
       - name: Report free disk and memory (after build)
