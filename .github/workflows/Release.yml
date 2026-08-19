@@ -84,6 +84,16 @@ jobs:
             macOS) vm_stat && sysctl -n hw.memsize ;;
             Windows) powershell -c "Get-CimInstance Win32_OperatingSystem | Format-List FreePhysicalMemory,TotalVisibleMemorySize" ;;
           esac
+      # `delete!(ENV, "CI")` is load bearing. AppBundler picks how to compile the bundled
+      # packages from `haskey(ENV, "CI")` (`JuliaImg.jl:93`): unset, it calls
+      # `Pkg.precompile`; set -- as it always is on a runner -- it `import`s every package
+      # instead (`JuliaImg.jl:285-288`). `import` runs each package's `__init__`, and
+      # PythonCall's resolves a Conda environment, which inside the staging tree ends as
+      # `InitError: Python executable ".../.CondaPkg/.pixi/envs/default/bin/python" does
+      # not exist`. `Pkg.precompile` never runs `__init__`, so it compiles PythonCall and
+      # its extensions without needing a Python interpreter at build time. Deleting the
+      # variable from Julia rather than from the shell keeps this identical on Windows,
+      # where the default shell has no `env -u`.
       # Split from the build below only so the Linux jobs can sample memory while the
       # build runs. The samples are streamed into this step's own log rather than
       # reported afterwards, because a runner taken down by the OOM killer never gets
@@ -94,13 +104,13 @@ jobs:
           (while true; do sleep 30; free -m | sed -n -e 2p -e 3p; done) &
           sampler=$!
           trap "kill $sampler 2>/dev/null || true" EXIT
-          ${{ matrix.xvfb && 'xvfb-run -s ''-screen 0 1024x768x24''' || '' }} julia --project=meta -e 'import AppBundler; AppBundler.main(ARGS)' build . --build-dir=build --target-arch=${{ matrix.arch }} --password=
+          ${{ matrix.xvfb && 'xvfb-run -s ''-screen 0 1024x768x24''' || '' }} julia --project=meta -e 'delete!(ENV, "CI"); import AppBundler; AppBundler.main(ARGS)' build . --build-dir=build --target-arch=${{ matrix.arch }} --password=
       - name: Build
         if: matrix.os != 'linux'
         env:
           PASSWORD: ${{ matrix.os == 'macos' && secrets.MACOS_PFX_PASSWORD || matrix.os == 'windows' && secrets.WINDOWS_PFX_PASSWORD || '' }}
         run: |
-          julia --project=meta -e 'import AppBundler; AppBundler.main(ARGS)' build . --build-dir=build --target-arch=${{ matrix.arch }} --password=${{ env.PASSWORD }}
+          julia --project=meta -e 'delete!(ENV, "CI"); import AppBundler; AppBundler.main(ARGS)' build . --build-dir=build --target-arch=${{ matrix.arch }} --password=${{ env.PASSWORD }}
       - name: Report free disk and memory (after build)
         if: always()
         shell: bash

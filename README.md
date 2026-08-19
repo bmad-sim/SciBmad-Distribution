@@ -127,12 +127,14 @@ with the same arguments once the `-e` expression returns — building the whole 
 This creates build artifacts in the `build` directory. By default the bundle targets the host
 platform.
 
-Build with `CI` unset in the environment, and make sure any CI workflow clears it (`env -u CI
-julia ...`). AppBundler chooses how to compile packages into the bundle based on that variable
-(`JuliaImg.jl:93`): without it, it calls `Pkg.precompile`; with it, it loads every package with
-`import` instead. `import` runs each package's `__init__`, and PythonCall's `__init__` resolves
-a Conda environment, which fails inside the bundle. `Pkg.precompile` never runs `__init__`, so
-it compiles PythonCall and its extensions without needing a Python interpreter at build time.
+Build with `CI` unset in the environment, and make sure any CI workflow clears it — the
+release workflow does so from inside Julia, with `julia -e 'delete!(ENV, "CI"); import
+AppBundler; ...'`, which works the same on every runner shell. AppBundler chooses how to
+compile packages into the bundle based on that variable (`JuliaImg.jl:93`): without it, it
+calls `Pkg.precompile`; with it, it loads every package with `import` instead. `import` runs
+each package's `__init__`, and PythonCall's `__init__` resolves a Conda environment, which
+fails inside the bundle. `Pkg.precompile` never runs `__init__`, so it compiles PythonCall
+and its extensions without needing a Python interpreter at build time.
 Set `JULIA_NUM_PRECOMPILE_TASKS` to bound the parallelism if the builder is short on memory.
 
 Release assets for all platforms are produced by the **Build Release Assets** GitHub Actions
