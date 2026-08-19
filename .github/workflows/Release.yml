@@ -84,23 +84,49 @@ jobs:
             macOS) vm_stat && sysctl -n hw.memsize ;;
             Windows) powershell -c "Get-CimInstance Win32_OperatingSystem | Format-List FreePhysicalMemory,TotalVisibleMemorySize" ;;
           esac
+      # The macOS x86_64 bundle is cross-built on an arm64 runner, and it is the
+      # target that cannot use its own bundled interpreter while compiling, so
+      # PythonCall falls back to the `python` on PATH. The runner's own Python is
+      # Homebrew's, which on these machines is arm64-only, and PythonCall does not
+      # merely run the interpreter -- it loads libpython into the Julia process,
+      # which here is the bundled x86_64 Julia running under Rosetta. An arm64
+      # library cannot be loaded there. So put a real x86_64 Python on PATH for
+      # this one job; nothing from it enters the bundle.
+      - name: Install an x86_64 Python for the cross build
+        if: matrix.os == 'macos' && matrix.arch == 'x86_64'
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          architecture: 'x64'
+      # Cheap evidence in the log: if `setup-python` ever stops providing an x64
+      # build on an arm64 runner, this prints an arm64 Mach-O here instead of
+      # failing an hour later inside a precompile worker.
+      - name: Check the build-time Python is x86_64
+        if: matrix.os == 'macos' && matrix.arch == 'x86_64'
+        run: |
+          python -VV
+          file "$(python -c 'import sys; print(sys.executable)')"
       # `delete!(ENV, "CI")` is load bearing. AppBundler picks how to compile the bundled
       # packages from `haskey(ENV, "CI")` (`JuliaImg.jl:93`): unset, it calls
       # `Pkg.precompile`; set -- as it always is on a runner -- it `import`s every package
       # instead (`JuliaImg.jl:285-288`). `import` runs each package's `__init__`, and
       # PythonCall's resolves a Conda environment, which inside the staging tree ends as
       # `InitError: Python executable ".../.CondaPkg/.pixi/envs/default/bin/python" does
-      # not exist`. `Pkg.precompile` never runs `__init__`, so it compiles PythonCall and
-      # its extensions without needing a Python interpreter at build time. Deleting the
-      # variable from Julia rather than from the shell keeps this identical on Windows,
-      # where the default shell has no `env -u`.
-      # `JULIA_CONDAPKG_BACKEND=Null` is for Windows, the one platform with no
-      # Python_jll build: there the patch that points PythonCall at the bundled
-      # interpreter has nothing to point at, and PythonCall would resolve an empty
-      # Conda environment inside the staging tree and fail the same way. `Null` makes
-      # it use the runner's own `python`, which only has to satisfy `__init__` while
-      # packages compile -- nothing about it enters the bundle. On every other
-      # platform the patch sets this same value itself.
+      # not exist`. `Pkg.precompile` runs an `__init__` only when compiling something
+      # requires loading the package, which is rare enough that most of that code never
+      # runs on the build machine. Deleting the variable from Julia rather than from the
+      # shell keeps this identical on Windows, where the default shell has no `env -u`.
+      # `JULIA_CONDAPKG_BACKEND` is for the two platforms that get no bundled
+      # interpreter -- Windows, which Python_jll does not build for, and macOS
+      # x86_64, whose build is broken (see `meta/patches/PythonCall/src/C/C.jl`).
+      # There the patch has nothing to point PythonCall at, so PythonCall would
+      # resolve an empty Conda environment inside the staging tree and fail with
+      # the same `InitError` as above. `Null` makes it use the `python` on PATH,
+      # which only has to satisfy `__init__` while packages compile -- nothing
+      # about it enters the bundle. On every other platform the patch sets this
+      # same value itself. The quotes are load bearing: unquoted `Null` is YAML's
+      # null, which Actions passes to the step as an empty string, and CondaPkg
+      # reads an empty backend as "unset" and falls back to pixi.
       # Split from the build below only so the Linux jobs can sample memory while the
       # build runs. The samples are streamed into this step's own log rather than
       # reported afterwards, because a runner taken down by the OOM killer never gets
@@ -108,7 +134,7 @@ jobs:
       - name: Build (with memory sampling)
         if: matrix.os == 'linux'
         env:
-          JULIA_CONDAPKG_BACKEND: Null
+          JULIA_CONDAPKG_BACKEND: "Null"
         run: |
           (while true; do sleep 30; free -m | sed -n -e 2p -e 3p; done) &
           sampler=$!
@@ -118,7 +144,7 @@ jobs:
         if: matrix.os != 'linux'
         env:
           PASSWORD: ${{ matrix.os == 'macos' && secrets.MACOS_PFX_PASSWORD || matrix.os == 'windows' && secrets.WINDOWS_PFX_PASSWORD || '' }}
-          JULIA_CONDAPKG_BACKEND: Null
+          JULIA_CONDAPKG_BACKEND: "Null"
         run: |
           julia --project=meta -e 'delete!(ENV, "CI"); import AppBundler; AppBundler.main(ARGS)' build . --build-dir=build --target-arch=${{ matrix.arch }} --password=${{ env.PASSWORD }}
       - name: Report free disk and memory (after build)
