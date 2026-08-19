@@ -57,10 +57,40 @@ end
 # extension loads its trigger packages -- running `PythonCall.__init__` in a
 # worker process that never sees this file.
 #
-# Python_jll has no Windows build. There PythonCall resolves Python the usual
-# way, so let CondaPkg manage an environment in the user's writable data
-# directory instead of inside the read-only bundle. That costs a one-time
-# download on first use, but it works.
-if Sys.iswindows()
+# Two platforms get no bundled interpreter: Windows, which Python_jll does not
+# build for, and macOS x86_64, whose build is broken (the patch explains how).
+# There PythonCall falls back to CondaPkg, which needs two things arranged for
+# it.
+#
+# First, somewhere writable to put the environment -- inside the read-only
+# bundle CondaPkg dies with `mkdir(".../.CondaPkg"): read-only file system`.
+#
+# Second, something that tells it to install Python at all. CondaPkg works that
+# out by walking the projects on the load path and reading the `CondaPkg.toml`
+# of every package it finds, and inside a bundle that walk comes up empty:
+# `Pkg.dependencies()` reports each package's source as a path in the user's
+# depot, where nothing was ever unpacked, so PythonCall's own `CondaPkg.toml` is
+# never read and CondaPkg creates an environment with nothing in it. PythonCall
+# then fails with `Python executable ".../bin/python" does not exist`. The
+# user's data directory is the active project, and CondaPkg reads the active
+# project's own `CondaPkg.toml` directly, without resolving anything -- so
+# declaring the interpreter there is enough. Both files are only created when
+# absent, so anything the user adds later with `CondaPkg.add` survives.
+#
+# The version bound is PythonCall v0.9.35's own; keep it in step when upgrading.
+if Sys.iswindows() || (Sys.isapple() && Sys.ARCH === :x86_64)
     get!(ENV, "JULIA_CONDAPKG_ENV", joinpath(AppEnv.USER_DATA, "python_env"))
+    try
+        mkpath(AppEnv.USER_DATA)
+        project = joinpath(AppEnv.USER_DATA, "Project.toml")
+        isfile(project) || write(project, "[deps]\n")
+        conda = joinpath(AppEnv.USER_DATA, "CondaPkg.toml")
+        isfile(conda) || write(conda, """
+            [deps.python]
+            build = "**cpython**"
+            version = ">=3.10,!=3.14.0,!=3.14.1,<4"
+            """)
+    catch err
+        @warn "Could not declare a Python interpreter for CondaPkg." err
+    end
 end

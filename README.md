@@ -43,9 +43,15 @@ and fail outright, since it would have to write inside the read-only install dir
 Packages can still be added to that interpreter from within the distribution with `CondaPkg`
 once it is pointed at a writable environment.
 
-Python_jll has no Windows build. On Windows, `meta/startup.jl` instead points CondaPkg at a
-writable directory beside the user's data, so the first `using PythonCall` downloads a Python
-environment once and works normally thereafter.
+Two platforms get no bundled interpreter. Python_jll has no Windows build at all, and its
+macOS x86_64 build is broken — it segfaults during interpreter startup on every Intel Mac,
+not just under Rosetta (the patch documents the cause). There PythonCall falls back to
+CondaPkg, which `meta/startup.jl` points at a writable directory beside the user's data and
+tells which interpreter to install; the patch to PythonCall then finds the resulting library.
+The first `using PythonCall` downloads a Python environment once and works normally
+thereafter, though every later load still pays for a CondaPkg resolve check rather than the
+bundled path's second or so. This is the slow path the distribution exists to avoid, and it is
+taken only where the fast one is unavailable.
 
 Three Makie backends are bundled. `CairoMakie` is the default used by the tutorial notebooks:
 it renders static PNG/SVG/PDF output and needs no graphics hardware. `GLMakie` adds
@@ -138,6 +144,13 @@ Python interpreter. `Pkg.precompile` runs an `__init__` only when compiling some
 loading the package, which is far less often.
 Set `JULIA_NUM_PRECOMPILE_TASKS` to bound the parallelism if the builder is short on memory.
 
+Cross-building the macOS x86_64 bundle from an Apple Silicon machine needs an x86_64 `python`
+on `PATH` and `JULIA_CONDAPKG_BACKEND=Null` in the environment. That target is the one that
+cannot use its own bundled interpreter while compiling, so PythonCall falls back to the
+`python` it can find, and it loads that interpreter's libpython into the (Rosetta-translated,
+x86_64) Julia process — an arm64 Python will not load there. The release workflow installs one
+with `actions/setup-python`. Nothing from it enters the bundle.
+
 Release assets for all platforms are produced by the **Build Release Assets** GitHub Actions
 workflow, which runs automatically when a release is created and can also be started manually
 from the Actions tab.
@@ -183,10 +196,28 @@ packages during the build. Three patches are currently applied:
   process, which never reads a startup file. The JLL is loaded on every such entry even when
   the environment variables are already set — Pkg's workers inherit environment variables but
   not loaded libraries, and Python's `ctypes` (imported by `juliacall` during initialisation)
-  only finds `libffi` because loading the JLL brought it into the process. It was generated
-  from PythonCall v0.9.35 and must be regenerated when PythonCall is upgraded: copy
-  `src/C/C.jl` from the new version and re-apply the block after the `include`s along with the
-  call to `use_bundled_python!` in `__init__`.
+  only finds `libffi` because loading the JLL brought it into the process.
+
+  The same patch skips the bundled interpreter on macOS x86_64, where Python_jll's build is
+  unusable. It is compiled with a 10.10 deployment target, so clang guards the 10.12-only
+  `getentropy` call in `pyurandom` with `__builtin_available`, which compiles to a call to
+  `___isPlatformVersionAtLeast`. That symbol is left as a flat-namespace dynamic lookup and
+  nothing in the process resolves it, so it binds to NULL and `Py_InitializeFromConfig` jumps
+  to address zero. `python3 -V` survives because it returns before reaching that code;
+  anything else dies with `SIGSEGV`. The aarch64 build targets macOS 11, where `getentropy`
+  needs no guard, which is why only this one platform is affected. This is an upstream bug in
+  `Python_jll 3.11.12+0`, and the skip can be dropped once a fixed build exists.
+
+  On those two platforms the same patch also has to find libpython. PythonCall locates it by
+  running `src/C/find_libpython.py`, at a path `@__DIR__` baked in at precompile time — inside
+  the build machine's staging directory, which does not exist on the installed machine. This
+  is the same relocation problem the `juliacall.jl` patch solves for `ROOT_DIR`. The patch
+  runs the script from where PythonCall actually is and passes the answer in
+  `JULIA_PYTHONCALL_LIB`.
+
+  It was generated from PythonCall v0.9.35 and must be regenerated when PythonCall is
+  upgraded: copy `src/C/C.jl` from the new version and re-apply the block after the
+  `include`s along with the two calls in `__init__`.
 
 Bump `version` in `Project.toml` (the distribution uses a `YY.M.D` scheme) and tag a release
 to publish new installers.
