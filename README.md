@@ -35,13 +35,13 @@ Julia standard libraries used by the tutorials (`LinearAlgebra`, `Statistics`, `
 in `Project.toml`.
 
 `PythonCall` is bundled with a Python interpreter, so `using PythonCall` returns in about a
-second and needs neither a download nor a network connection. `meta/startup.jl` points it at
-the `Python_jll` interpreter inside the bundle and switches CondaPkg's environment management
-off; left to itself, PythonCall would try to resolve a Conda environment on first use, which
-would both impose the wait this distribution exists to avoid and fail outright, since it would
-have to write inside the read-only install directory. Packages can still be added to that
-interpreter from within the distribution with `CondaPkg` once it is pointed at a writable
-environment.
+second and needs neither a download nor a network connection. A patch to PythonCall itself
+(see "Patches" below) points it at the `Python_jll` interpreter inside the bundle and switches
+CondaPkg's environment management off; left to itself, PythonCall would try to resolve a Conda
+environment on first use, which would both impose the wait this distribution exists to avoid
+and fail outright, since it would have to write inside the read-only install directory.
+Packages can still be added to that interpreter from within the distribution with `CondaPkg`
+once it is pointed at a writable environment.
 
 Python_jll has no Windows build. On Windows, `meta/startup.jl` instead points CondaPkg at a
 writable directory beside the user's data, so the first `using PythonCall` downloads a Python
@@ -132,9 +132,10 @@ release workflow does so from inside Julia, with `julia -e 'delete!(ENV, "CI"); 
 AppBundler; ...'`, which works the same on every runner shell. AppBundler chooses how to
 compile packages into the bundle based on that variable (`JuliaImg.jl:93`): without it, it
 calls `Pkg.precompile`; with it, it loads every package with `import` instead. `import` runs
-each package's `__init__`, and PythonCall's `__init__` resolves a Conda environment, which
-fails inside the bundle. `Pkg.precompile` never runs `__init__`, so it compiles PythonCall
-and its extensions without needing a Python interpreter at build time.
+every package's `__init__`, which for a bundle this size means running a great deal of code
+that has no business running on a build machine — PythonCall's `__init__`, for one, starts a
+Python interpreter. `Pkg.precompile` runs an `__init__` only when compiling something requires
+loading the package, which is far less often.
 Set `JULIA_NUM_PRECOMPILE_TASKS` to bound the parallelism if the builder is short on memory.
 
 Release assets for all platforms are produced by the **Build Release Assets** GitHub Actions
@@ -154,7 +155,7 @@ Use Julia 1.11 for this, for the reason given under [Julia versions](#julia-vers
 ## Patches
 
 Files under `meta/patches/<Package>/…` are copied over the corresponding files of the bundled
-packages during the build. Two patches are currently applied:
+packages during the build. Three patches are currently applied:
 
 - `meta/patches/GLMakie/src/precompiles.jl` — GLMakie's `@setup_workload` block opens an
   OpenGL screen, which is not available while packages are precompiled into the bundle. The
@@ -172,6 +173,20 @@ packages during the build. Two patches are currently applied:
   generated from PythonCall v0.9.35 and must be regenerated when PythonCall is upgraded: copy
   `src/Core/juliacall.jl` from the new version and replace the two uses of `ROOT_DIR` inside
   `init_juliacall` with the load-path lookup.
+
+- `meta/patches/PythonCall/src/C/C.jl` — PythonCall asks CondaPkg to download and resolve a
+  Python environment when it is first loaded. The bundle ships its own interpreter in
+  `Python_jll`, and CondaPkg cannot work inside a read-only install anyway, so the patched
+  copy points PythonCall at the bundled interpreter from `PythonCall.C.__init__`. It runs
+  there, rather than from `meta/startup.jl`, because the build needs the same configuration:
+  compiling a package that has a PythonCall extension loads PythonCall in a Pkg worker
+  process, which never reads a startup file. The JLL is loaded on every such entry even when
+  the environment variables are already set — Pkg's workers inherit environment variables but
+  not loaded libraries, and Python's `ctypes` (imported by `juliacall` during initialisation)
+  only finds `libffi` because loading the JLL brought it into the process. It was generated
+  from PythonCall v0.9.35 and must be regenerated when PythonCall is upgraded: copy
+  `src/C/C.jl` from the new version and re-apply the block after the `include`s along with the
+  call to `use_bundled_python!` in `__init__`.
 
 Bump `version` in `Project.toml` (the distribution uses a `YY.M.D` scheme) and tag a release
 to publish new installers.
