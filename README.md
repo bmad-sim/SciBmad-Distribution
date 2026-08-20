@@ -34,38 +34,6 @@ Julia standard libraries used by the tutorials (`LinearAlgebra`, `Statistics`, `
 `Printf`, `SparseArrays`, `DelimitedFiles`) are always available and are therefore not listed
 in `Project.toml`.
 
-`PythonCall` is bundled with a Python interpreter, so `using PythonCall` returns in about a
-second and needs neither a download nor a network connection. A patch to PythonCall itself
-(see "Patches" below) points it at the `Python_jll` interpreter inside the bundle and switches
-CondaPkg's environment management off; left to itself, PythonCall would try to resolve a Conda
-environment on first use, which would both impose the wait this distribution exists to avoid
-and fail outright, since it would have to write inside the read-only install directory.
-Packages can still be added to that interpreter from within the distribution with `CondaPkg`
-once it is pointed at a writable environment.
-
-Two platforms get no bundled interpreter. Python_jll has no Windows build at all, and its
-macOS x86_64 build is broken — it segfaults during interpreter startup on every Intel Mac,
-not just under Rosetta (the patch documents the cause). There PythonCall falls back to
-CondaPkg, which `meta/startup.jl` points at a writable directory beside the user's data and
-tells which interpreter to install; the patch to PythonCall then finds the resulting library.
-The first `using PythonCall` downloads a Python environment once and works normally
-thereafter, though every later load still pays for a CondaPkg resolve check rather than the
-bundled path's second or so. This is the slow path the distribution exists to avoid, and it is
-taken only where the fast one is unavailable.
-
-Three Makie backends are bundled. `CairoMakie` is the default used by the tutorial notebooks:
-it renders static PNG/SVG/PDF output and needs no graphics hardware. `GLMakie` adds
-interactive, zoomable, 3D-capable windows, but requires a working OpenGL 3.3 context, so
-`using GLMakie` will fail on headless machines, over an SSH session without display
-forwarding, and in some containers and virtual machines — use `CairoMakie` there. `WGLMakie`
-renders into a browser and is the backend to use from a notebook served over the network. When
-several are loaded, whichever was activated last (`CairoMakie.activate!()` and friends)
-receives the plots.
-
-`Manifest.toml` records the exact resolved versions. Both it and `meta/Manifest.toml` were
-resolved with Julia 1.11, the minimum version this distribution supports, and AppBundler takes
-the Julia version to ship inside the bundle from their `julia_version` field.
-
 ## Installation
 
 Download the appropriate pre-built distribution (MSIX, Snap, or DMG) from the **Assets**
@@ -109,24 +77,33 @@ The bundle is unaffected, since it ships 1.11.
 
 ## Building
 
-Install Julia 1.11 or later and install the build dependencies:
+- Install Julia 1.11 or later.
 
-```bash
-julia --project=meta -e 'using Pkg; Pkg.instantiate()'
-```
+- Edit Project.toml: Set the `SciBmad` compat version to build the distribution around. Also
+  update the `version` string to the current date. The format is `"YY.MM.DD"`.
 
-Then perform the build:
+- Build dependencies:
 
-```bash
-julia --project=meta -e 'import AppBundler; AppBundler.main(ARGS)' build . --build-dir=build --selfsign
-```
+  ```bash
+  julia --project=meta -e 'using Pkg; Pkg.instantiate()'
+  ```
 
-Everything after the `-e` expression is passed through to AppBundler's command line. On Julia
-1.12 or later the shorter `julia --project=meta -m AppBundler build . --build-dir=build
---selfsign` form works as well, but `-m` does not exist in 1.11, so the invocation above is
-the portable one. Pass `AppBundler.main(["--help"])` to see all build options.
+- Perform the build:
 
-Use `import AppBundler`, not `using AppBundler`. AppBundler exports `main` and marks it with
+  ```bash
+  julia --project=meta -e 'import AppBundler; AppBundler.main(ARGS)' build . --build-dir=build --selfsign
+  ```
+
+  Everything after the `-e` expression is passed through to AppBundler's command line. On Julia
+  1.12 or later the shorter `julia --project=meta -m AppBundler build . --build-dir=build
+  --selfsign` form works as well, but `-m` does not exist in 1.11, so the invocation above is
+ the portable one. Pass `AppBundler.main(["--help"])` to see all build options.
+
+- Push changes to the GitHub repo main branch via a Pull Request.
+
+- Under the `Actions` menu, press `Build Release Assets` and then `Run workflow`.
+
+Note: `import AppBundler` is used and, not `using AppBundler`. AppBundler exports `main` and marks it with
 `@main`, so `using` brings `main` into `Main` and Julia's entry point invokes it a second time
 with the same arguments once the `-e` expression returns — building the whole bundle twice.
 
@@ -221,3 +198,37 @@ packages during the build. Three patches are currently applied:
 
 Bump `version` in `Project.toml` (the distribution uses a `YY.M.D` scheme) and tag a release
 to publish new installers.
+
+## Notes
+
+`PythonCall` is bundled with a Python interpreter, so `using PythonCall` returns in about a
+second and needs neither a download nor a network connection. A patch to PythonCall itself
+(see "Patches" below) points it at the `Python_jll` interpreter inside the bundle and switches
+CondaPkg's environment management off; left to itself, PythonCall would try to resolve a Conda
+environment on first use, which would both impose the wait this distribution exists to avoid
+and fail outright, since it would have to write inside the read-only install directory.
+Packages can still be added to that interpreter from within the distribution with `CondaPkg`
+once it is pointed at a writable environment.
+
+Two platforms get no bundled interpreter. Python_jll has no Windows build at all, and its
+macOS x86_64 build is broken — it segfaults during interpreter startup on every Intel Mac,
+not just under Rosetta (the patch documents the cause). There PythonCall falls back to
+CondaPkg, which `meta/startup.jl` points at a writable directory beside the user's data and
+tells which interpreter to install; the patch to PythonCall then finds the resulting library.
+The first `using PythonCall` downloads a Python environment once and works normally
+thereafter, though every later load still pays for a CondaPkg resolve check rather than the
+bundled path's second or so. This is the slow path the distribution exists to avoid, and it is
+taken only where the fast one is unavailable.
+
+Three Makie backends are bundled. `CairoMakie` is the default used by the tutorial notebooks:
+it renders static PNG/SVG/PDF output and needs no graphics hardware. `GLMakie` adds
+interactive, zoomable, 3D-capable windows, but requires a working OpenGL 3.3 context, so
+`using GLMakie` will fail on headless machines, over an SSH session without display
+forwarding, and in some containers and virtual machines — use `CairoMakie` there. `WGLMakie`
+renders into a browser and is the backend to use from a notebook served over the network. When
+several are loaded, whichever was activated last (`CairoMakie.activate!()` and friends)
+receives the plots.
+
+`Manifest.toml` records the exact resolved versions. Both it and `meta/Manifest.toml` were
+resolved with Julia 1.11, the minimum version this distribution supports, and AppBundler takes
+the Julia version to ship inside the bundle from their `julia_version` field.
