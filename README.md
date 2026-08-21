@@ -40,12 +40,14 @@ section on the [releases page](https://github.com/bmad-sim/SciBmad-Distribution/
 (you may need to expand the Assets dropdown for prerelease versions), then follow the
 instructions for your platform:
 
-- **MSIX (Windows)**: If self-signed, open the MSIX bundle properties and add the certificate
-  to the trusted certificate authorities first (see
+- **MSIX (Windows)**: The released bundles are signed with a self-signed certificate, so
+  Windows will not trust them out of the box. Open the MSIX bundle properties and add its
+  certificate to the trusted certificate authorities first (see
   https://www.advancedinstaller.com/install-test-certificate-from-msix.html). Then
   double-click the installer and install the app.
 - **Snap (Linux)**: `snap install --classic --dangerous SciBmadDistribution.snap`
-- **DMG (macOS)**: If self-signed, click on the app first, then go to
+- **DMG (macOS)**: The released bundles are signed with a self-signed certificate, so
+  Gatekeeper will not trust them out of the box. Click on the app first, then go to
   `Settings -> Privacy & Security` and whitelist the launch request. Then drag and drop the
   application into the `Applications` folder. Launch the application and go again to
   `Settings -> Privacy & Security` to whitelist it.
