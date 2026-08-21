@@ -52,10 +52,6 @@ instructions for your platform:
   application into the `Applications` folder. Launch the application and go again to
   `Settings -> Privacy & Security` to whitelist it.
 
-These extra steps are avoidable with an investment in Windows and macOS code signing
-certificates. For Snap, the app can be submitted to the Snap Store so it can be installed
-through a GUI.
-
 # For Maintainers:
 
 ## Julia versions
