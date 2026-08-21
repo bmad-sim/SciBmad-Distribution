@@ -1,14 +1,17 @@
 # SciBmad-Distribution
 
-A Julia distribution that ships [SciBmad](https://github.com/bmad-sim/SciBmad) — the Julia
-toolkit for charged particle beam dynamics. Install it, launch Julia, and `using SciBmad` returns
-immediately: no package installation, no first-use compilation wait. Additional packages can
-still be installed with `Pkg` without triggering recompilation of the bundled ones.
+A Julia **distribution** that ships [SciBmad](https://github.com/bmad-sim/SciBmad) — the Julia
+toolkit for charged particle beam dynamics. Besides SciBmad, this distribution bundles a number of additional
+packages and their dependencies.
+A list of these additional packages is in the `Project.toml` file.
+
+Install this distribution (see below), launch Julia, and `using SciBmad` returns
+immediately: no package installation, no first-use compilation wait.
+Additional packages can still be installed with Pkg without triggering recompilation of the bundled ones.
 
 The distribution is built with [AppBundler.jl](https://github.com/PeaceFounder/AppBundler.jl)
-and follows the [Jumbo](https://github.com/JanisErdmanis/Jumbo) template: the `Project.toml`
-here has `name` and `version` fields, and every package it lists — plus their dependencies —
-is bundled into the stdlib path of the shipped Julia so that they are never accidentally
+and follows the [Jumbo](https://github.com/JanisErdmanis/Jumbo) template. All packages in the distribution, 
+including dependencies, is bundled into the stdlib path of the shipped Julia so that they are never accidentally
 recompiled.
 
 ## What is included
@@ -29,10 +32,6 @@ recompiled.
   `meta/startup.jl` in interactive sessions)
 - **Python interoperability**: `PythonCall`, together with the `Python_jll` interpreter it
   runs against
-
-Julia standard libraries used by the tutorials (`LinearAlgebra`, `Statistics`, `Random`,
-`Printf`, `SparseArrays`, `DelimitedFiles`) are always available and are therefore not listed
-in `Project.toml`.
 
 ## Installation
 
