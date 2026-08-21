@@ -79,10 +79,17 @@ The bundle is unaffected, since it ships 1.11.
 
 - Install Julia 1.11 or later.
 
-- Edit Project.toml: Set the `SciBmad` compat version to build the distribution around. Also
-  update the `version` string to the current date. The format is `"YY.MM.DD"`.
+- Edit `Project.toml`: set the `SciBmad` compat entry to the version to build the distribution
+  around. Also update the `version` string to the current date. The format is `"YY.MM.DD"`.
 
-- Build dependencies:
+- Re-resolve the package set so that `Manifest.toml` matches the new compat entry. Use Julia
+  1.11 for this, for the reason given under [Julia versions](#julia-versions):
+
+  ```bash
+  julia --project=. -e 'using Pkg; Pkg.update()'
+  ```
+
+- Install the build dependencies:
 
   ```bash
   julia --project=meta -e 'using Pkg; Pkg.instantiate()'
@@ -97,18 +104,22 @@ The bundle is unaffected, since it ships 1.11.
   Everything after the `-e` expression is passed through to AppBundler's command line. On Julia
   1.12 or later the shorter `julia --project=meta -m AppBundler build . --build-dir=build
   --selfsign` form works as well, but `-m` does not exist in 1.11, so the invocation above is
- the portable one. Pass `AppBundler.main(["--help"])` to see all build options.
+  the portable one. Pass `AppBundler.main(["--help"])` to see all build options. This creates
+  build artifacts in the `build` directory; by default the bundle targets the host platform.
 
-- Push changes to the GitHub repo main branch via a Pull Request.
+- Push the updated `Project.toml` and `Manifest.toml` to the GitHub repo main branch via a
+  Pull Request.
 
-- Under the `Actions` menu, press `Build Release Assets` and then `Run workflow`.
+- Under the `Actions` menu, press `Build Release Assets` and then `Run workflow`. To have the
+  bundles attached to a release, put the tag of an existing release in the optional
+  `Release tag to upload to` field; left empty, the run only leaves the bundles as workflow
+  artifacts, which are deleted after a day. The same workflow also runs automatically whenever
+  a release is created.
 
-Note: `import AppBundler` is used and, not `using AppBundler`. AppBundler exports `main` and marks it with
-`@main`, so `using` brings `main` into `Main` and Julia's entry point invokes it a second time
-with the same arguments once the `-e` expression returns — building the whole bundle twice.
-
-This creates build artifacts in the `build` directory. By default the bundle targets the host
-platform.
+Note: `import AppBundler` is used, not `using AppBundler`. AppBundler exports `main` and marks
+it with `@main`, so `using` brings `main` into `Main` and Julia's entry point invokes it a
+second time with the same arguments once the `-e` expression returns — building the whole
+bundle twice.
 
 Build with `CI` unset in the environment, and make sure any CI workflow clears it — the
 release workflow does so from inside Julia, with `julia -e 'delete!(ENV, "CI"); import
@@ -127,10 +138,6 @@ cannot use its own bundled interpreter while compiling, so PythonCall falls back
 `python` it can find, and it loads that interpreter's libpython into the (Rosetta-translated,
 x86_64) Julia process — an arm64 Python will not load there. The release workflow installs one
 with `actions/setup-python`. Nothing from it enters the bundle.
-
-Release assets for all platforms are produced by the **Build Release Assets** GitHub Actions
-workflow, which runs automatically when a release is created and can also be started manually
-from the Actions tab.
 
 ## Updating the package set
 
@@ -196,14 +203,11 @@ packages during the build. Three patches are currently applied:
   upgraded: copy `src/C/C.jl` from the new version and re-apply the block after the
   `include`s along with the two calls in `__init__`.
 
-Bump `version` in `Project.toml` (the distribution uses a `YY.M.D` scheme) and tag a release
-to publish new installers.
-
 ## Notes
 
 `PythonCall` is bundled with a Python interpreter, so `using PythonCall` returns in about a
 second and needs neither a download nor a network connection. A patch to PythonCall itself
-(see "Patches" below) points it at the `Python_jll` interpreter inside the bundle and switches
+(see "Patches" above) points it at the `Python_jll` interpreter inside the bundle and switches
 CondaPkg's environment management off; left to itself, PythonCall would try to resolve a Conda
 environment on first use, which would both impose the wait this distribution exists to avoid
 and fail outright, since it would have to write inside the read-only install directory.
