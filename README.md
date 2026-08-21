@@ -80,7 +80,9 @@ The bundle is unaffected, since it ships 1.11.
 - Install Julia 1.11 or later.
 
 - Edit `Project.toml`: set the `SciBmad` compat entry to the version to build the distribution
-  around. Also update the `version` string to the current date. The format is `"YY.MM.DD"`.
+  around. Also update the `version` string to the current date. The format is `"YY.M.D"` where
+  `M` is the month and `D` is the day without any leading zeros. Example: Use `"26.8.3"` 
+  instead of `"26.08.03"`.
 
 - Re-resolve the package set so that `Manifest.toml` matches the new compat entry. Use Julia
   1.11 for this, for the reason given under [Julia versions](#julia-versions):
