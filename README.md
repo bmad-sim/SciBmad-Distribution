@@ -54,48 +54,24 @@ instructions for your platform:
 
 # For Maintainers:
 
-## Julia versions
-
-Building works on Julia 1.11 and 1.12 alike. The host Julia only runs AppBundler itself:
-the bundled Julia, the packages copied into it, and their precompilation all come from
-`Manifest.toml`, so a build driven by 1.12 still produces a bundle containing Julia 1.11.7.
-
-Do **not** run `Pkg.resolve()` or `Pkg.update()` on this repository under a Julia newer than
-1.11. Doing so rewrites `julia_version` in `Manifest.toml` and would silently change the Julia
-shipped to users on the next release. This is why the release workflow pins `setup-julia` to
-`1.11`; use 1.11 for any package-set update.
-
-Using the repository as a development environment under 1.12 works but is slightly degraded:
-Pkg warns that the manifest was resolved by a different Julia version (and, because Pkg 1.12
-hashes `Project.toml` differently, wrongly reports the manifest as stale), and manifest entries
-for packages that are standard libraries in 1.11 but not in 1.12 — notably `MbedTLS_jll` — have
-no download recorded, so `MbedTLS`, `HTTP` and `FileIO`'s HTTP extension fail to precompile.
-The bundle is unaffected, since it ships 1.11.
-
 ## Building
-
-- Install Julia 1.11 or later.
 
 - Edit `Project.toml`: set the `SciBmad` compat entry to the version to build the distribution
   around. Also update the `version` string to the current date. The format is `"YY.M.D"` where
   `M` is the month and `D` is the day without any leading zeros. Example: Use `"26.8.3"` 
-  instead of `"26.08.03"`.
+  instead of `"26.08.03"`. Also set the Julia version if needed here and in `meta/Project.toml`
 
-- Re-resolve the package set so that `Manifest.toml` matches the new compat entry. Use Julia
-  1.11 for this, for the reason given under [Julia versions](#julia-versions):
-
+- Re-resolve the package set so that `Manifest.toml` matches the new compat entry;
   ```bash
   julia --project=. -e 'using Pkg; Pkg.update()'
   ```
 
 - Install the build dependencies:
-
   ```bash
   julia --project=meta -e 'using Pkg; Pkg.instantiate()'
   ```
 
 - Perform the build:
-
   ```bash
   julia --project=meta -e 'import AppBundler; AppBundler.main(ARGS)' build . --build-dir=build --selfsign
   ```
@@ -145,8 +121,6 @@ Edit `Project.toml`, re-resolve, and commit the updated `Manifest.toml`:
 ```bash
 julia --project=. -e 'using Pkg; Pkg.update()'
 ```
-
-Use Julia 1.11 for this, for the reason given under [Julia versions](#julia-versions).
 
 ## Patches
 
@@ -231,7 +205,3 @@ forwarding, and in some containers and virtual machines — use `CairoMakie` the
 renders into a browser and is the backend to use from a notebook served over the network. When
 several are loaded, whichever was activated last (`CairoMakie.activate!()` and friends)
 receives the plots.
-
-`Manifest.toml` records the exact resolved versions. Both it and `meta/Manifest.toml` were
-resolved with Julia 1.11, the minimum version this distribution supports, and AppBundler takes
-the Julia version to ship inside the bundle from their `julia_version` field.
