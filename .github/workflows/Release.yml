@@ -43,7 +43,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: julia-actions/setup-julia@v2
         with:
-          version: '1.11'
+          version: '1.12'
       - uses: julia-actions/cache@v3
       # `Pkg.build()` is not redundant with `instantiate`. This dependency tree keeps its
       # build products in `~/.julia/conda`: PyCall's generated `deps/deps.jl` hardcodes a

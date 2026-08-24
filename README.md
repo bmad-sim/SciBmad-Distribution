@@ -59,7 +59,10 @@ instructions for your platform:
 - Edit `Project.toml`: set the `SciBmad` compat entry to the version to build the distribution
   around. Also update the `version` string to the current date. The format is `"YY.M.D"` where
   `M` is the month and `D` is the day without any leading zeros. Example: Use `"26.8.3"` 
-  instead of `"26.08.03"`. Also set the Julia version if needed here and in `meta/Project.toml`
+  instead of `"26.08.03"`. 
+
+  If changing the Julia version, this needs to be changed in three files: `Project.toml`, 
+  `meta/Project.toml`, and `.github/workflows/Release.yml`
 
 - Re-resolve the package set so that `Manifest.toml` matches the new compat entry;
   ```bash
@@ -73,14 +76,8 @@ instructions for your platform:
 
 - Perform the build:
   ```bash
-  julia --project=meta -e 'import AppBundler; AppBundler.main(ARGS)' build . --build-dir=build --selfsign
+  julia --project=meta -m AppBundler build . --build-dir=build --selfsign
   ```
-
-  Everything after the `-e` expression is passed through to AppBundler's command line. On Julia
-  1.12 or later the shorter `julia --project=meta -m AppBundler build . --build-dir=build
-  --selfsign` form works as well, but `-m` does not exist in 1.11, so the invocation above is
-  the portable one. Pass `AppBundler.main(["--help"])` to see all build options. This creates
-  build artifacts in the `build` directory; by default the bundle targets the host platform.
 
 - Push the updated `Project.toml` and `Manifest.toml` to the GitHub repo main branch via a
   Pull Request.
@@ -90,11 +87,6 @@ instructions for your platform:
   `Release tag to upload to` field; left empty, the run only leaves the bundles as workflow
   artifacts, which are deleted after a day. The same workflow also runs automatically whenever
   a release is created.
-
-Note: `import AppBundler` is used, not `using AppBundler`. AppBundler exports `main` and marks
-it with `@main`, so `using` brings `main` into `Main` and Julia's entry point invokes it a
-second time with the same arguments once the `-e` expression returns — building the whole
-bundle twice.
 
 Build with `CI` unset in the environment, and make sure any CI workflow clears it — the
 release workflow does so from inside Julia, with `julia -e 'delete!(ENV, "CI"); import
