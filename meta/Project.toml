@@ -3,4 +3,4 @@ AppBundler = "40eb83ae-c93a-480c-8f39-f018b568f472"
 
 [compat]
 AppBundler = "1"
-julia = "1.11"
+julia = "1.12"
