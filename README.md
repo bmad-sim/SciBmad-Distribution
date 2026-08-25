@@ -56,6 +56,8 @@ instructions for your platform:
 
 ## Building
 
+- If desired, modify the set of packages to be bundled by editing `Project.toml`.
+
 - Edit `Project.toml`: set the `SciBmad` compat entry to the version to build the distribution
   around. Also update the `version` string to the current date. The format is `"YY.M.D"` where
   `M` is the month and `D` is the day without any leading zeros. Example: Use `"26.8.3"` 
@@ -69,50 +71,32 @@ instructions for your platform:
   julia --project=. -e 'using Pkg; Pkg.update()'
   ```
 
-- Install the build dependencies:
+- Install the build dependencies. This also re-resolves `meta/Manifest.toml` against the Julia
+  version set in `meta/Project.toml`, so it is required even if you skip the local build below:
   ```bash
   julia --project=meta -e 'using Pkg; Pkg.instantiate()'
   ```
 
-- Perform the build:
+- Optionally, verify the build locally. This is not needed to produce a release but can save time
+  when debugging. The output goes
+  to the gitignored `build` directory, and the release workflow rebuilds everything from a fresh
+  checkout. It may be worth doing to catch a broken build in one local run rather than after
+  a five-platform CI matrix, but it targets the host platform only, so it cannot reproduce the
+  platform-specific failures the workflow guards against:
   ```bash
   julia --project=meta -m AppBundler build . --build-dir=build --selfsign
   ```
 
-- Push the updated `Project.toml` and `Manifest.toml` to the GitHub repo main branch via a
-  Pull Request.
+- Push the updated `Project.toml`, `Manifest.toml`, `meta/Project.toml` and `meta/Manifest.toml`
+  to the GitHub repo main branch via a Pull Request. `meta/Manifest.toml` 
+  records the Julia version the build dependencies were resolved against, and the
+  release workflow installs exactly the versions it pins.
 
-- Under the `Actions` menu, press `Build Release Assets` and then `Run workflow`. To have the
-  bundles attached to a release, put the tag of an existing release in the optional
+- In GitHub under the `Actions` menu, press `Build Release Assets` and then `Run workflow`. 
+  To have the bundles attached to a release, put the tag of an existing release in the optional
   `Release tag to upload to` field; left empty, the run only leaves the bundles as workflow
   artifacts, which are deleted after a day. The same workflow also runs automatically whenever
   a release is created.
-
-Build with `CI` unset in the environment, and make sure any CI workflow clears it — the
-release workflow does so from inside Julia, with `julia -e 'delete!(ENV, "CI"); import
-AppBundler; ...'`, which works the same on every runner shell. AppBundler chooses how to
-compile packages into the bundle based on that variable (`JuliaImg.jl:93`): without it, it
-calls `Pkg.precompile`; with it, it loads every package with `import` instead. `import` runs
-every package's `__init__`, which for a bundle this size means running a great deal of code
-that has no business running on a build machine — PythonCall's `__init__`, for one, starts a
-Python interpreter. `Pkg.precompile` runs an `__init__` only when compiling something requires
-loading the package, which is far less often.
-Set `JULIA_NUM_PRECOMPILE_TASKS` to bound the parallelism if the builder is short on memory.
-
-Cross-building the macOS x86_64 bundle from an Apple Silicon machine needs an x86_64 `python`
-on `PATH` and `JULIA_CONDAPKG_BACKEND=Null` in the environment. That target is the one that
-cannot use its own bundled interpreter while compiling, so PythonCall falls back to the
-`python` it can find, and it loads that interpreter's libpython into the (Rosetta-translated,
-x86_64) Julia process — an arm64 Python will not load there. The release workflow installs one
-with `actions/setup-python`. Nothing from it enters the bundle.
-
-## Updating the package set
-
-Edit `Project.toml`, re-resolve, and commit the updated `Manifest.toml`:
-
-```bash
-julia --project=. -e 'using Pkg; Pkg.update()'
-```
 
 ## Patches
 
