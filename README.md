@@ -47,10 +47,10 @@ instructions for your platform:
   double-click the installer and install the app.
 - **Snap (Linux)**: `snap install --classic --dangerous SciBmadDistribution.snap`
 - **DMG (macOS)**: The released bundles are signed with a self-signed certificate, so
-  Gatekeeper will not trust them out of the box. Click on the app first, then go to
-  `Settings -> Privacy & Security` and whitelist the launch request. Then drag and drop the
-  application into the `Applications` folder. Launch the application and go again to
-  `Settings -> Privacy & Security` to whitelist it.
+  Gatekeeper will not trust them out of the box. Click on the `SciBmadDistribution` app first,
+  then go to `Apple Menu -> Settings -> Privacy & Security` and whitelist the launch request.
+  Then drag and drop the application into the `Applications` folder. 
+  Launch the application and go again to `Settings -> Privacy & Security` to whitelist it.
 
 # For Maintainers:
 
