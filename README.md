@@ -46,11 +46,26 @@ instructions for your platform:
   https://www.advancedinstaller.com/install-test-certificate-from-msix.html). Then
   double-click the installer and install the app.
 - **Snap (Linux)**: `snap install --classic --dangerous SciBmadDistribution.snap`
-- **DMG (macOS)**: The released bundles are signed with a self-signed certificate, so
-  Gatekeeper will not trust them out of the box. Click on the `SciBmadDistribution` app first,
-  then go to `Apple Menu -> Settings -> Privacy & Security` and whitelist the launch request.
-  Then drag and drop the application into the `Applications` folder. 
-  Launch the application and go again to `Settings -> Privacy & Security` to whitelist it.
+- **DMG (macOS)**: The released bundles are signed with a self-signed certificate, so macOS
+  does not trust them out of the box. In addition, macOS attaches a *quarantine* flag to
+  anything copied out of a downloaded disk image, and Gatekeeper refuses to launch a
+  quarantined app that it cannot verify. To get around the security, 
+  install from the Terminal, substituting the appropriate directory and name of the 
+  dmg file you downloaded in the first line (the other lines do not need to be modified):
+  ```bash
+  hdiutil attach ~/Downloads/scibmaddistribution-26.8.23-aarch64.dmg
+  ditto "/Volumes/SciBmadDistribution Installer/SciBmadDistribution.app" /Applications/SciBmadDistribution.app
+  hdiutil detach "/Volumes/SciBmadDistribution Installer"
+  sudo xattr -dr com.apple.quarantine /Applications/SciBmadDistribution.app
+  sudo chmod -R a-w /Applications/SciBmadDistribution.app
+  ```
+  This may take a minute or two.
+
+## Using the Distribution
+
+- Run the `SciBmadDistribution` app. This should open a Julia window.
+
+- The command `using SciBmad` will load the Distribution.
 
 # For Maintainers:
 
@@ -181,3 +196,34 @@ forwarding, and in some containers and virtual machines — use `CairoMakie` the
 renders into a browser and is the backend to use from a notebook served over the network. When
 several are loaded, whichever was activated last (`CairoMakie.activate!()` and friends)
 receives the plots.
+
+For the macOS install, the closing `chmod` makes the installed bundle read-only. 
+The distribution ships its Julia
+package cache inside the app itself; if Julia writes there while running, it invalidates the
+app's code signature and macOS then refuses to launch it.
+
+For the macOS install, 
+if you prefer the Finder, the order matters: click the app on the mounted disk image
+*first* and approve it under `Settings -> Privacy & Security`, and only then drag it into
+`Applications`. Dragging before approving is what fails. Then apply the `chmod` command
+above to prevent modification of the app. 
+If the app shows a white "no entry" circle and will not start, 
+something has written a file inside the app bundle after installation, which invalidates its
+code signature. macOS then refuses to launch it and reports nothing at all: no error dialog,
+no crash report, no log entry. Confirm with:
+
+```bash
+codesign --verify --strict /Applications/SciBmadDistribution.app
+```
+
+A reply of `a sealed resource is missing or invalid` identifies this problem, and the
+accompanying `file added:` line names the file responsible. Removing that file restores the
+signature and the app starts normally:
+
+```bash
+sudo rm "/Applications/SciBmadDistribution.app/<path from the file added: line>"
+```
+
+Reinstalling also works, but the problem will recur unless the `chmod -R a-w` step from the
+installation instructions is applied.
+
