@@ -61,7 +61,7 @@ instructions for your platform:
   sudo xattr -dr com.apple.quarantine /Applications/SciBmadDistribution.app
   sudo chmod -R a-w /Applications/SciBmadDistribution.app
   ```
-  This may take a minute or two.
+  This may take a minute or two. Note: The `sudo` commands will ask for a password.
 
 ## Using the Distribution
 
