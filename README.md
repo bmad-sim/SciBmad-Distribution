@@ -35,6 +35,8 @@ recompiled.
 
 ## Installation
 
+Currently, the Distribution only works with Julia version 1.12
+
 Download the appropriate pre-built distribution (MSIX, Snap, or DMG) from the **Assets**
 section on the [releases page](https://github.com/bmad-sim/SciBmad-Distribution/releases)
 (you may need to expand the Assets dropdown for prerelease versions), then follow the
@@ -62,6 +64,8 @@ instructions for your platform:
   This may take a minute or two.
 
 ## Using the Distribution
+
+- Install Julia 1.12 if needed.
 
 - Run the `SciBmadDistribution` app. This should open a Julia window.
 
