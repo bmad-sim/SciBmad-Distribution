@@ -2,7 +2,7 @@
 #
 # This file runs after platform-specific arguments are set, allowing you to apply
 # common startup options across all environments. Use this file to:
-#   - Load development tools (e.g., Revise.jl for hot-reloading, Infiltrator.jl for debugging)
+#   - Load development tools (e.g., Infiltrator.jl for debugging)
 #   - Configure environment-specific settings
 #   - Display diagnostic information about the Julia environment
 #
@@ -22,8 +22,6 @@ end
 
 if isinteractive()
     @async begin
-        @eval using Revise
-
         @eval Base begin
             import Infiltrator: @infiltrate
             export @infiltrate

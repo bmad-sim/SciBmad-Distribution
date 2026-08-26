@@ -28,8 +28,10 @@ recompiled.
   and `LaTeXStrings`
 - **Data and utilities**: `DataFrames`, `Graphs`, `JSON`, `SpecialFunctions`,
   `ReferenceFrameRotations`
-- **Interactive tooling**: `Revise`, `Infiltrator` (both loaded automatically by
-  `meta/startup.jl` in interactive sessions)
+- **Interactive tooling**: `Infiltrator` (loaded automatically by `meta/startup.jl` in
+  interactive sessions)
+- **Notebooks**: `IJulia`, so the bundled Julia can be used as a Jupyter kernel (see
+  "Using the Distribution from Jupyter" below)
 - **Python interoperability**: `PythonCall`, together with the `Python_jll` interpreter it
   runs against
 
@@ -70,6 +72,32 @@ instructions for your platform:
 - Run the `SciBmadDistribution` app. This should open a Julia window.
 
 - The command `using SciBmad` will load the Distribution.
+
+## Using the Distribution from Jupyter
+
+`IJulia` is bundled, so the distribution can serve as a Jupyter kernel. Jupyter itself is not
+bundled — use whichever installation you already have. Register a kernel once, from inside the
+distribution:
+
+```julia
+using IJulia
+IJulia.installkernel("SciBmad")
+```
+
+That writes a kernel specification into your own Jupyter data directory (never inside the
+read-only app), pointing at the bundled Julia. `SciBmad` then appears in Jupyter's kernel list
+and notebooks using it get the whole distribution with no precompilation wait.
+
+Two things to know. Register the kernel from the app itself rather than from another Julia:
+a kernel is only useful if its `argv` names the bundled binary, and `installkernel` records
+whichever Julia is running it. And a kernel specification is just a file keyed by name, so
+registering `SciBmad` from two different Julia installations means the second silently
+replaces the first — give them different names if you want both.
+
+`IJulia.notebook()` and `IJulia.jupyterlab()` also work, provided `jupyter` is on `PATH`; the
+patch below makes IJulia look it up at run time. They cannot fall back to installing Jupyter
+through Conda the way a normal IJulia install does, because that would have to write inside
+the read-only bundle.
 
 # For Maintainers:
 
@@ -120,7 +148,7 @@ instructions for your platform:
 ## Patches
 
 Files under `meta/patches/<Package>/…` are copied over the corresponding files of the bundled
-packages during the build. Three patches are currently applied:
+packages during the build. Five patches are currently applied:
 
 - `meta/patches/GLMakie/src/precompiles.jl` — GLMakie's `@setup_workload` block opens an
   OpenGL screen, which is not available while packages are precompiled into the bundle. The
@@ -170,6 +198,39 @@ packages during the build. Three patches are currently applied:
   It was generated from PythonCall v0.9.35 and must be regenerated when PythonCall is
   upgraded: copy `src/C/C.jl` from the new version and re-apply the block after the
   `include`s along with the two calls in `__init__`.
+
+- `meta/patches/IJulia/deps/deps.jl` — IJulia refuses to load unless `deps/deps.jl` exists:
+  `src/IJulia.jl` aborts with `IJulia not properly installed. Please run Pkg.build("IJulia")`.
+  That file is written by `Pkg.build("IJulia")`, and AppBundler copies pristine package trees
+  into the bundle without ever running `deps/build.jl`, so bundling IJulia used to fail every
+  build — which is why it was dropped from the distribution in August 2026.
+
+  Unlike the patches above, this one supplies the generated file rather than a forked copy of
+  a source file, so it does not have to be regenerated when IJulia is upgraded; it only has to
+  keep defining the two names `deps.jl` is contracted to define. `JUPYTER` is set to the bare
+  string `"jupyter"`, which `find_jupyter_subcommand` already treats as "look it up on `PATH`".
+  That is deliberate: the stock `deps/build.jl` records an absolute path to the Jupyter it
+  found on the build machine, which is meaningless on the installed machine, and the bare
+  string is what turns the lookup into a run-time one. `IJULIA_DEBUG` is `false`, which is what
+  a stock build writes when the variable is unset, and as upstream it is frozen at build time.
+
+- `meta/patches/Conda/deps/deps.jl` — `Conda` arrives as a dependency of IJulia and fails the
+  same way, with `Conda is not properly configured. Run Pkg.build("Conda")`. It is precompiled
+  into the bundle whether or not anything calls it, so it needs the same treatment. The patch
+  supplies `deps/build.jl`'s own default values, computed rather than hardcoded so the build
+  machine's depot path does not appear in the file.
+
+  The `mkpath` in it is load bearing: `src/Conda.jl` evaluates `const PREFIX = prefix(ROOTENV)`
+  at precompile time and `prefix` throws unless that directory already exists, which
+  `Pkg.build("Conda")` would otherwise have created.
+
+  One limitation is worth recording. `Conda.ROOTENV` and everything derived from it stay
+  `const`, so they are still frozen at precompile time and inside the installed bundle they
+  point at the build's staging depot, which no longer exists. Nothing in the distribution
+  calls Conda — the only path that reaches it is `IJulia.notebook()` reading
+  `Conda.SCRIPTDIR` as a fallback after `Sys.which("jupyter")` has already failed — so this is
+  latent rather than a fault. Making it correct would mean converting roughly ten `const`s in
+  `Conda.jl` into run-time globals, which is a fork of the file rather than a patch to it.
 
 ## Notes
 
