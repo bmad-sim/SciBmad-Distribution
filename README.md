@@ -81,18 +81,28 @@ distribution:
 
 ```julia
 using IJulia
-IJulia.installkernel("SciBmad")
+IJulia.installkernel("SciBmad Distribution";
+                     specname = "scibmad-distribution",
+                     displayname = "SciBmad Distribution")
 ```
 
 That writes a kernel specification into your own Jupyter data directory (never inside the
-read-only app), pointing at the bundled Julia. `SciBmad` then appears in Jupyter's kernel list
-and notebooks using it get the whole distribution with no precompilation wait.
+read-only app), pointing at the bundled Julia. `SciBmad Distribution` then appears in Jupyter's
+kernel list and notebooks using it get the whole distribution with no precompilation wait.
 
-Two things to know. Register the kernel from the app itself rather than from another Julia:
+Both keyword arguments are needed. Left to itself `installkernel` appends the running Julia's
+`major.minor` to the name it is given, so `installkernel("SciBmad")` produces the kernel
+`scibmad-1.12`, displayed as `SciBmad 1.12`. That reads as SciBmad version 1.12, which it is
+not — it is the Julia version. Setting `specname` and `displayname` explicitly keeps the version
+out of the name entirely, which is also what makes re-registering after an upgrade overwrite the
+existing kernel in place rather than leaving a second one behind pointing at the old app.
+
+Two more things to know. Register the kernel from the app itself rather than from another Julia:
 a kernel is only useful if its `argv` names the bundled binary, and `installkernel` records
-whichever Julia is running it. And a kernel specification is just a file keyed by name, so
-registering `SciBmad` from two different Julia installations means the second silently
-replaces the first — give them different names if you want both.
+whichever Julia is running it. And a kernel specification is just a file keyed by `specname`, so
+registering the same name from two different Julia installations means the second silently
+replaces the first — this is why the distribution's kernel is not called `Julia`, which is the
+name an ordinary IJulia install claims.
 
 `IJulia.notebook()` and `IJulia.jupyterlab()` also work, provided `jupyter` is on `PATH`; the
 patch below makes IJulia look it up at run time. They cannot fall back to installing Jupyter
