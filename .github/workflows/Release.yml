@@ -12,8 +12,37 @@ on:
     types: [created]
 
 jobs:
+  # A missing or mistyped `upload_tag` is otherwise only discovered after the entire
+  # build matrix has run -- macos-x86_64 alone takes close to three hours -- at which
+  # point `gh release upload` reports `release not found` and every bundle is thrown
+  # away with it. Checking first costs a few seconds. This job always runs so that
+  # `build` can depend on it unconditionally: a `needs` on a job that was skipped
+  # skips the dependent too, so the empty-tag case is handled inside the step rather
+  # than with a job-level `if`.
+  check-tag:
+    name: Check release tag
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify the release exists
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.inputs.upload_tag || github.event.release.tag_name }}
+        run: |
+          if [ -z "$TAG" ]; then
+            echo "No upload tag given; bundles will be left as workflow artifacts."
+            exit 0
+          fi
+          if ! gh release view "$TAG" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            echo "::error::No release found for tag '$TAG'. Create the release first, or leave the field empty to keep the bundles as workflow artifacts."
+            echo "Existing releases:"
+            gh release list --repo "$GITHUB_REPOSITORY" --limit 10
+            exit 1
+          fi
+          echo "Release '$TAG' exists; bundles will be uploaded to it."
+
   build:
     name: Build ${{ matrix.os }}-${{ matrix.arch }}
+    needs: check-tag
     runs-on: ${{ matrix.runner }}
     strategy:
       # The x86_64 targets take the longest and are the ones that have been failing,
@@ -186,7 +215,7 @@ jobs:
           
           find artifacts/ -type f | while read -r file; do
             echo "Uploading: $file"
-            gh release upload "$TAG_NAME" "$file"
+            gh release upload "$TAG_NAME" "$file" --clobber
           done
           
           echo "All artifacts uploaded successfully!"
