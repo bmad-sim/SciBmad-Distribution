@@ -55,15 +55,24 @@ instructions for your platform:
   anything copied out of a downloaded disk image, and Gatekeeper refuses to launch a
   quarantined app that it cannot verify. To get around the security, 
   install from the Terminal, substituting the appropriate directory and name of the 
-  dmg file you downloaded in the first line (the other lines do not need to be modified):
+  dmg file you downloaded in the second line (the other lines do not need to be modified):
   ```bash
-  hdiutil attach ~/Downloads/scibmaddistribution-26.8.23-aarch64.dmg
+  sudo rm -rf /Applications/SciBmadDistribution.app
+  hdiutil attach ~/Downloads/scibmaddistribution-26.8.26-aarch64.dmg
   ditto "/Volumes/SciBmadDistribution Installer/SciBmadDistribution.app" /Applications/SciBmadDistribution.app
   hdiutil detach "/Volumes/SciBmadDistribution Installer"
   sudo xattr -dr com.apple.quarantine /Applications/SciBmadDistribution.app
   sudo chmod -R a-w /Applications/SciBmadDistribution.app
   ```
   This may take a minute or two. Note: The `sudo` commands will ask for a password.
+
+  The first line matters when upgrading and is harmless on a first install. `ditto` copies
+  *into* an existing directory rather than replacing it, so any file the old version had and
+  the new one does not survives inside the new bundle. A file that is not in the app's
+  signature is exactly what breaks it: the app then fails to launch with no error at all, in
+  the way described under "Notes" below. Upgrading from a version that bundled a package the
+  new one drops — `Revise` was removed after 26.8.23 — hits this. Deleting the old app first
+  avoids it.
 
 ## Using the Distribution
 
