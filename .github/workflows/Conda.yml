@@ -22,46 +22,71 @@ on:
         required: false
         default: false
         type: boolean
+      platforms:
+        description: 'Which targets to build: "all", or a comma-separated list of macos-x86_64, macos-aarch64, linux-x86_64, linux-aarch64, windows-x86_64'
+        required: false
+        default: 'all'
+        type: string
   release:
     types: [created]
 
 jobs:
-  build:
-    name: Conda ${{ matrix.os }}-${{ matrix.arch }}
-    runs-on: ${{ matrix.runner }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
+  # The matrix is computed rather than written inline so that a dispatch can rebuild
+  # a single target. A failure is usually specific to one platform, and each job runs
+  # for the best part of an hour, so re-running all five to retest one is wasteful.
+  # A `release` event ignores the input and always builds everything.
+  matrix:
+    name: Select targets
+    runs-on: ubuntu-latest
+    outputs:
+      include: ${{ steps.pick.outputs.include }}
+    steps:
+      - id: pick
+        env:
+          # Empty on a release event, which `all` then covers.
+          FILTER: ${{ github.event.inputs.platforms || 'all' }}
+        run: |
           # `subdir` is the conda platform label and must be stated explicitly.
           # rattler-build otherwise infers it from the machine it is running on,
           # which is wrong whenever the payload is cross-built -- both macOS targets
           # are built on an arm64 runner, so an x86_64 payload would be published as
-          # osx-arm64 and an arm64 payload as osx-64 if the runner's own conda
-          # happened to be x86_64. Either way the package installs on the wrong
-          # architecture and fails at first launch.
-          - runner: macos-latest
-            os: macos
-            arch: x86_64
-            subdir: osx-64
-          - runner: macos-latest
-            os: macos
-            arch: aarch64
-            subdir: osx-arm64
-          - runner: ubuntu-latest
-            os: linux
-            arch: x86_64
-            subdir: linux-64
-            xvfb: true
-          - runner: ubuntu-24.04-arm
-            os: linux
-            arch: aarch64
-            subdir: linux-aarch64
-            xvfb: true
-          - runner: windows-latest
-            os: windows
-            arch: x86_64
-            subdir: win-64
+          # osx-arm64 if the runner's own conda happened to be x86_64. Either way the
+          # package installs on the wrong architecture and fails at first launch.
+          cat > all.json <<'JSON'
+          [
+            {"runner": "macos-latest",     "os": "macos",   "arch": "x86_64",  "subdir": "osx-64"},
+            {"runner": "macos-latest",     "os": "macos",   "arch": "aarch64", "subdir": "osx-arm64"},
+            {"runner": "ubuntu-latest",    "os": "linux",   "arch": "x86_64",  "subdir": "linux-64",      "xvfb": true},
+            {"runner": "ubuntu-24.04-arm", "os": "linux",   "arch": "aarch64", "subdir": "linux-aarch64", "xvfb": true},
+            {"runner": "windows-latest",   "os": "windows", "arch": "x86_64",  "subdir": "win-64"}
+          ]
+          JSON
+
+          if [ -z "$FILTER" ] || [ "$FILTER" = "all" ]; then
+            include=$(jq -c . all.json)
+          else
+            include=$(jq -c --arg f "$FILTER" '
+              ($f | split(",") | map(ascii_downcase | gsub("^\\s+|\\s+$"; ""))) as $want
+              | [ .[] | . as $e | select($want | index("\($e.os)-\($e.arch)") != null) ]
+            ' all.json)
+            if [ "$(echo "$include" | jq 'length')" -eq 0 ]; then
+              echo "::error::No targets matched '$FILTER'. Valid names:"
+              jq -r '.[] | "  \(.os)-\(.arch)"' all.json
+              exit 1
+            fi
+          fi
+
+          echo "Building: $(echo "$include" | jq -r 'map("\(.os)-\(.arch)") | join(", ")')"
+          echo "include=$include" >> "$GITHUB_OUTPUT"
+
+  build:
+    name: Conda ${{ matrix.os }}-${{ matrix.arch }}
+    needs: matrix
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.matrix.outputs.include) }}
 
     steps:
       - uses: actions/checkout@v4
