@@ -1,0 +1,80 @@
+# rattler-build recipe for the SciBmad distribution.
+#
+# This repackages the payload staged by `meta/conda/stage.jl`; it does not build
+# anything. The payload is already a complete Julia installation with every package
+# precompiled, which is the whole point of the distribution -- rebuilding it here
+# would reintroduce the wait it exists to avoid.
+#
+# Build (from the repository root, after staging):
+#     julia --project=meta meta/conda/stage.jl --target-arch=aarch64 --tarball
+#     SCIBMAD_PAYLOAD=$PWD/build/conda/payload \
+#       rattler-build build --recipe meta/conda/recipe --output-dir build/conda/pkg
+#
+# `build.sh` / `build.bat` are picked up automatically from this directory; there is
+# deliberately no `script:` field naming them.
+
+context:
+  version: ${{ env.get("SCIBMAD_VERSION", default="26.8.26") }}
+  payload: ${{ env.get("SCIBMAD_PAYLOAD", default="../../../build/conda/payload") }}
+
+package:
+  name: scibmad
+  version: ${{ version }}
+
+source:
+  - path: ${{ payload }}
+    target_directory: payload
+
+build:
+  number: 0
+
+  dynamic_linking:
+    # Julia resolves its own libraries relative to the executable, and the payload
+    # has been verified to run unchanged from an arbitrary path: loading,
+    # PythonCall's interpreter and libpython, juliacall, GLMakie and tracking all
+    # work after moving the tree. Left on, relocation would rewrite RPATHs across
+    # several gigabytes of binaries and artifacts to inject conda's prefix -- slow,
+    # and a way to break a working layout for no benefit.
+    binary_relocation: false
+    # The payload is self-contained and `run:` is deliberately empty, so every
+    # library a bundled binary links against is either inside the payload or a
+    # system library. Both checks otherwise read that as thousands of errors.
+    overlinking_behavior: ignore
+    overdepending_behavior: ignore
+
+  prefix_detection:
+    # Nothing needs the install prefix baked in: the `bin/` shim resolves it from
+    # its own location at runtime, and Julia works relative to its executable. This
+    # skips a scan-and-rewrite pass over ~35,000 files.
+    ignore: true
+
+requirements:
+  # Deliberately empty. The payload ships its own Julia, its own Python interpreter
+  # where Python_jll provides one, and every Julia dependency. Adding conda-forge's
+  # `julia` or `python` here would install a second copy that nothing uses.
+  run: []
+
+tests:
+  - script:
+      - if: unix
+        then:
+          - scibmad -e 'using SciBmad; println("scibmad ok")'
+          - scibmad -e 'using PythonCall; println("pythoncall ok")'
+      - if: win
+        then:
+          - scibmad -e "using SciBmad; println(42)"
+
+about:
+  homepage: https://github.com/bmad-sim/SciBmad-Distribution
+  summary: Julia distribution for accelerator physics simulation
+  description: |
+    A precompiled, self-contained distribution of SciBmad and its ecosystem. Ships a
+    Julia runtime with every package already precompiled, so there is no
+    multi-minute precompilation on first use.
+  license: GPL-3.0-or-later
+  license_file: payload/LICENSE.md
+  repository: https://github.com/bmad-sim/SciBmad-Distribution
+
+extra:
+  recipe-maintainers:
+    - DavidSagan
