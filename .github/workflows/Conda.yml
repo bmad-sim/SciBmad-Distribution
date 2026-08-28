@@ -1,0 +1,234 @@
+name: Build and Publish Conda Packages
+
+# Publishes the distribution to the `bmad-sim` channel on anaconda.org, so that
+# installing it is `conda install -c bmad-sim scibmad` rather than a DMG that
+# Gatekeeper rejects. See issue #22.
+#
+# This deliberately does not share a job with Release.yml. Both need the same
+# ~40-60 minute precompile, so folding them together would be cheaper, but the DMG
+# path discards its staging tree inside `AppBundler.bundle` and there is no seam to
+# take the payload from without changing AppBundler. Running them as separate
+# workflows keeps the DMG path -- which works -- untouched.
+#
+# The setup steps below are duplicated from Release.yml, and the comments there
+# explain why each one exists. If they drift, factor them into a composite action
+# under `.github/actions/` rather than fixing them twice.
+
+on:
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: 'Upload to anaconda.org (otherwise packages are left as workflow artifacts)'
+        required: false
+        default: false
+        type: boolean
+  release:
+    types: [created]
+
+jobs:
+  build:
+    name: Conda ${{ matrix.os }}-${{ matrix.arch }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # `subdir` is the conda platform label and must be stated explicitly.
+          # rattler-build otherwise infers it from the machine it is running on,
+          # which is wrong whenever the payload is cross-built -- both macOS targets
+          # are built on an arm64 runner, so an x86_64 payload would be published as
+          # osx-arm64 and an arm64 payload as osx-64 if the runner's own conda
+          # happened to be x86_64. Either way the package installs on the wrong
+          # architecture and fails at first launch.
+          - runner: macos-latest
+            os: macos
+            arch: x86_64
+            subdir: osx-64
+          - runner: macos-latest
+            os: macos
+            arch: aarch64
+            subdir: osx-arm64
+          - runner: ubuntu-latest
+            os: linux
+            arch: x86_64
+            subdir: linux-64
+            xvfb: true
+          - runner: ubuntu-24.04-arm
+            os: linux
+            arch: aarch64
+            subdir: linux-aarch64
+            xvfb: true
+          - runner: windows-latest
+            os: windows
+            arch: x86_64
+            subdir: win-64
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: '1.12'
+      - uses: julia-actions/cache@v3
+
+      # See Release.yml: `Pkg.build()` is not redundant with `instantiate`, because
+      # the cache restores the build records without the `~/.julia/conda` tree they
+      # describe.
+      - name: Install dependencies
+        run: julia --project=meta -e 'using Pkg; Pkg.instantiate(); Pkg.build()'
+
+      # See Release.yml: x86_64 bundles compile for three CPU targets at once and
+      # have twice been OOM-killed mid-precompile without the extra swap.
+      - name: Add swap space
+        if: matrix.os == 'linux'
+        run: |
+          sudo fallocate -l 16G /swapfile-extra
+          sudo chmod 600 /swapfile-extra
+          sudo mkswap /swapfile-extra
+          sudo swapon /swapfile-extra
+          swapon --show
+
+      # See Release.yml: the macOS x86_64 payload is cross-built on an arm64 runner
+      # and cannot use its own bundled interpreter while compiling, so PythonCall
+      # falls back to the `python` on PATH -- which must be a real x86_64 build,
+      # because PythonCall loads libpython into a Julia running under Rosetta.
+      - name: Install an x86_64 Python for the cross build
+        if: matrix.os == 'macos' && matrix.arch == 'x86_64'
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          architecture: 'x64'
+
+      - name: Report free disk and memory (before build)
+        shell: bash
+        run: |
+          df -h
+          case "${{ runner.os }}" in
+            Linux) free -h ;;
+            macOS) vm_stat && sysctl -n hw.memsize ;;
+            Windows) powershell -c "Get-CimInstance Win32_OperatingSystem | Format-List FreePhysicalMemory,TotalVisibleMemorySize" ;;
+          esac
+
+      # `stage.jl` unsets CI and sets JULIA_CONDAPKG_BACKEND itself -- see the
+      # comments in that file -- so unlike Release.yml this step needs neither.
+      - name: Stage payload
+        shell: bash
+        run: |
+          ${{ matrix.xvfb && 'xvfb-run -s ''-screen 0 1024x768x24''' || '' }} \
+            julia --project=meta meta/conda/stage.jl \
+              --target-arch=${{ matrix.arch }} \
+              --os=${{ matrix.os }} \
+              --dest=build/conda
+
+      - name: Report free disk and memory (after build)
+        if: always()
+        shell: bash
+        run: |
+          df -h
+          case "${{ runner.os }}" in
+            Linux) free -h ;;
+            macOS) vm_stat && sysctl -n hw.memsize ;;
+            Windows) powershell -c "Get-CimInstance Win32_OperatingSystem | Format-List FreePhysicalMemory,TotalVisibleMemorySize" ;;
+          esac
+
+      - uses: prefix-dev/setup-pixi@v0
+        with:
+          run-install: false
+
+      - name: Install rattler-build
+        shell: bash
+        run: pixi global install rattler-build
+
+      - name: Read version
+        id: version
+        shell: bash
+        run: |
+          version=$(julia --project=meta -e '
+            import AppBundler
+            using AppBundler: Resources, get_bundle_parameters!
+            prefs = Resources.get_project_preferences(pwd())["AppBundler"]
+            p = get_bundle_parameters!(Dict{String,Any}(), "Project.toml"; preferences = prefs)
+            print(p["APP_VERSION"])')
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "Building conda package version $version"
+
+      - name: Build conda package
+        shell: bash
+        env:
+          SCIBMAD_VERSION: ${{ steps.version.outputs.version }}
+          SCIBMAD_PAYLOAD: ${{ github.workspace }}/build/conda/payload
+        run: |
+          rattler-build build \
+            --recipe meta/conda/recipe \
+            --output-dir build/conda/pkg \
+            --target-platform ${{ matrix.subdir }} \
+            --no-test
+
+      # Cheap guard against the cross-build mislabelling above: if the package did
+      # not land in the subdir this matrix entry asked for, the architecture is wrong
+      # and it must not be published.
+      - name: Check the package landed in the expected subdir
+        shell: bash
+        run: |
+          expected="build/conda/pkg/${{ matrix.subdir }}"
+          if ! ls "$expected"/*.conda >/dev/null 2>&1; then
+            echo "::error::No package in $expected. Built subdirs:"
+            find build/conda/pkg -name '*.conda'
+            exit 1
+          fi
+          ls -la "$expected"/*.conda
+
+      # Built and tested separately: the recipe's test launches the payload, which is
+      # worth doing against a real install rather than in the build sandbox.
+      #
+      # Skipped for the macOS x86_64 target, which is cross-built on an arm64 runner.
+      # The test would either be refused for the platform mismatch or run the payload
+      # under Rosetta, and neither tells us what the test is for -- that the package
+      # works on the machine it is meant for. That one target is covered by the DMG
+      # workflow's own build and by installing from the channel once published.
+      - name: Test the built package
+        if: '!(matrix.os == ''macos'' && matrix.arch == ''x86_64'')'
+        shell: bash
+        run: |
+          pkg=$(ls build/conda/pkg/${{ matrix.subdir }}/*.conda | head -1)
+          echo "Testing $pkg"
+          rattler-build test --package-file "$pkg"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: conda-${{ matrix.os }}-${{ matrix.arch }}
+          path: build/conda/pkg/**/*.conda
+          retention-days: 5
+
+  publish:
+    name: Publish to anaconda.org
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.event_name == 'release' || github.event.inputs.publish == 'true'
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: ./artifacts
+
+      - uses: prefix-dev/setup-pixi@v0
+        with:
+          run-install: false
+
+      - name: Install rattler-build
+        run: pixi global install rattler-build
+
+      # ANACONDA_API_TOKEN must be an org-scoped token for `bmad-sim` with
+      # "Allow write access to the API site" enabled. Create it under the
+      # organization's Access settings, not a personal account, so that it keeps
+      # working when individual maintainers come and go.
+      - name: Upload
+        env:
+          ANACONDA_API_TOKEN: ${{ secrets.ANACONDA_API_TOKEN }}
+        run: |
+          if [ -z "$ANACONDA_API_TOKEN" ]; then
+            echo "::error::ANACONDA_API_TOKEN is not set; cannot publish."
+            exit 1
+          fi
+          find artifacts -name '*.conda' -print0 | while IFS= read -r -d '' pkg; do
+            echo "Uploading $pkg"
+            rattler-build upload anaconda --owner bmad-sim --force "$pkg"
+          done
