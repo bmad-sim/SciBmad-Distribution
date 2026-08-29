@@ -278,5 +278,10 @@ jobs:
           fi
           find artifacts -name '*.conda' -print0 | while IFS= read -r -d '' pkg; do
             echo "Uploading $pkg"
-            rattler-build upload anaconda --owner bmad-sim --force "$pkg"
+            # No --force. Overwriting a version already on the channel replaces a
+            # package people may have installed, silently and with no record that
+            # it changed. Failing here instead is the point: if a version needs
+            # republishing, bump it, or remove the old files from anaconda.org
+            # deliberately. --force was useful only while the channel was empty.
+            rattler-build upload anaconda --owner bmad-sim "$pkg"
           done

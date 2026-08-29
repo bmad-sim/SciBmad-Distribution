@@ -37,7 +37,35 @@ recompiled.
 
 ## Installation
 
-Currently, the Distribution only works with Julia version 1.12
+There are two ways to install: from conda, or from a downloaded installer. Conda is the
+easier one and is recommended.
+
+Note that the distribution ships its own Julia, so Julia does not need to be installed
+separately. The bundled Julia is version 1.12.
+
+### Conda (recommended)
+
+```bash
+conda install -c bmad-sim scibmad
+```
+
+Then run `scibmad` to start Julia with the distribution loaded, or `scibmad script.jl` to
+run a script. `using SciBmad` returns immediately, with no precompilation wait.
+
+This works on Linux (x86-64 and aarch64), macOS (Intel and Apple silicon), and Windows
+(x86-64). Mamba, micromamba and pixi work as well as conda.
+
+Conda is recommended because the installers below are signed with a self-signed
+certificate, which both Windows and macOS refuse to trust without the manual steps
+described there. A conda package carries no signature for them to reject. Updating is
+also `conda update -c bmad-sim scibmad` rather than downloading a fresh installer.
+
+Packages the user installs with `Pkg` go in a per-user directory outside the conda
+environment (`~/.local/share/scibmad`, or `%LOCALAPPDATA%\scibmad` on Windows), so they
+survive removing and recreating the environment. Set `USER_DATA` before launching to put
+them somewhere else.
+
+### Installers
 
 Download the appropriate pre-built distribution (MSIX, Snap, or DMG) from the **Assets**
 section on the [releases page](https://github.com/bmad-sim/SciBmad-Distribution/releases)
@@ -76,9 +104,10 @@ instructions for your platform:
 
 ## Using the Distribution
 
-- Install Julia 1.12 if needed.
+- If installed with conda, run `scibmad`. This starts Julia in the terminal.
 
-- Run the `SciBmadDistribution` app. This should open a Julia window.
+- If installed from an installer, run the `SciBmadDistribution` app. This should open a
+  Julia window.
 
 - The command `using SciBmad` will load the Distribution.
 
@@ -163,6 +192,63 @@ the read-only bundle.
   `Release tag to upload to` field; left empty, the run only leaves the bundles as workflow
   artifacts, which are deleted after a day. The same workflow also runs automatically whenever
   a release is created.
+
+## Conda packaging
+
+The conda package is built and published by a separate workflow from the installers, in
+`.github/workflows/Conda.yml`, from the recipe and staging driver under `meta/conda/`. It
+publishes to the `bmad-sim` channel on anaconda.org.
+
+To publish a release: in GitHub under `Actions`, press `Build and Publish Conda Packages`,
+then `Run workflow`, and tick `publish`. Left unticked, the run builds and tests every
+platform and leaves the packages as workflow artifacts, which is the way to check a change
+without putting anything on the channel. The same workflow runs automatically when a
+release is created. Two other inputs are useful:
+
+- `platforms` takes a comma-separated list instead of `all`, so one target can be rebuilt
+  without waiting on the other four -- each job spends over an hour precompiling. The
+  names are `macos-x86_64`, `macos-aarch64`, `linux-x86_64`, `linux-aarch64` and
+  `windows-x86_64`, not the conda subdir names.
+- `artifacts_from_run` takes the ID of an earlier run and publishes the packages that run
+  produced, skipping the builds entirely. This is for when the packages are fine and only
+  the upload failed; it turns a three-hour retry into a two-minute one.
+
+Some things about this are not obvious from the files:
+
+- `meta/conda/stage.jl` calls `AppBundler`'s `JuliaImg.stage` directly rather than going
+  through `AppBundler.main`. The DMG, MSIX and Snap paths each wrap the same payload in a
+  differently shaped container, while `stage` is the step underneath all of them, so
+  calling it gives one layout on every platform and skips code signing -- which a conda
+  package neither needs nor wants, since an absent signature is nothing for Gatekeeper to
+  reject.
+
+- The payload is staged with `RUNTIME_MODE=MIN`, not the `SANDBOX` the installers use.
+  SANDBOX has `AppEnv` locate the per-user depot through the container it assumes it is
+  running in, and a conda install is in no container: outside one, the Snap and MSIX code
+  paths both fall back to a temporary directory, and anything the user installed with
+  `Pkg` would be gone by the next session. MIN reads `USER_DATA` from the environment on
+  every platform, and the `bin/scibmad` launcher points it at a persistent per-user path
+  outside the prefix.
+
+- Symlinks are resolved into copies on Windows only. The payload carries around 500
+  relative symlinks from Julia package sources, and they cannot survive the copy into the
+  prefix there. They also need a privilege to create that a user installing the package
+  may not have.
+
+- Every matrix entry names its conda subdir explicitly. rattler-build otherwise infers it
+  from the machine it is running on, which is wrong for the macOS targets because both are
+  cross-built on an arm64 runner -- an x86_64 payload would be published as `osx-arm64`,
+  and installed on machines that cannot run it.
+
+- The upload deliberately does not pass `--force`, so republishing a version that is
+  already on the channel fails rather than silently replacing what people have installed.
+  Bump the version instead, or remove the old files on anaconda.org first.
+
+- Publishing needs an `ANACONDA_API_TOKEN` repository secret holding a token created from
+  inside the `bmad-sim` organization on anaconda.org, with "Allow write access to the API
+  site" enabled. A token made from a personal account has no rights in the organization's
+  namespace and fails with a 401 that reads like a missing secret. The workflow passes it
+  to rattler-build as `ANACONDA_API_KEY`, which is the name rattler-build reads.
 
 ## Patches
 
