@@ -27,6 +27,11 @@ on:
         required: false
         default: 'all'
         type: string
+      artifacts_from_run:
+        description: 'Skip building and publish the packages built by this earlier run ID. Requires publish=true.'
+        required: false
+        default: ''
+        type: string
   release:
     types: [created]
 
@@ -82,6 +87,9 @@ jobs:
   build:
     name: Conda ${{ matrix.os }}-${{ matrix.arch }}
     needs: matrix
+    # Skipped when republishing an earlier run's artifacts: the packages already
+    # exist, and rebuilding five platforms for hours to retry an upload is waste.
+    if: ${{ github.event.inputs.artifacts_from_run == '' }}
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
@@ -228,11 +236,20 @@ jobs:
     name: Publish to anaconda.org
     runs-on: ubuntu-latest
     needs: build
-    if: github.event_name == 'release' || github.event.inputs.publish == 'true'
+    # `always()` is needed because `build` is skipped in the republish case, and a
+    # skipped dependency would otherwise skip this job too. The result check keeps
+    # a genuine build failure from publishing anyway.
+    if: |
+      always()
+      && (github.event_name == 'release' || github.event.inputs.publish == 'true')
+      && (needs.build.result == 'success' || needs.build.result == 'skipped')
     steps:
       - uses: actions/download-artifact@v4
         with:
           path: ./artifacts
+          # Empty for a normal run, which then means "this run's artifacts".
+          run-id: ${{ github.event.inputs.artifacts_from_run }}
+          github-token: ${{ github.token }}
 
       - uses: prefix-dev/setup-pixi@v0
         with:
@@ -247,10 +264,16 @@ jobs:
       # working when individual maintainers come and go.
       - name: Upload
         env:
-          ANACONDA_API_TOKEN: ${{ secrets.ANACONDA_API_TOKEN }}
+          # rattler-build reads the anaconda.org credential from ANACONDA_API_KEY.
+          # Passing it as ANACONDA_API_TOKEN -- the name anaconda.org itself uses for
+          # these, and the name of the repo secret -- fails with "no anaconda.org API
+          # key provided and none found in keychain", which reads like a missing
+          # secret rather than a misnamed one. Map it here rather than renaming the
+          # secret, so the secret keeps the name it has on anaconda.org.
+          ANACONDA_API_KEY: ${{ secrets.ANACONDA_API_TOKEN }}
         run: |
-          if [ -z "$ANACONDA_API_TOKEN" ]; then
-            echo "::error::ANACONDA_API_TOKEN is not set; cannot publish."
+          if [ -z "$ANACONDA_API_KEY" ]; then
+            echo "::error::ANACONDA_API_TOKEN secret is not set; cannot publish."
             exit 1
           fi
           find artifacts -name '*.conda' -print0 | while IFS= read -r -d '' pkg; do
