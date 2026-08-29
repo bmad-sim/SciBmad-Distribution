@@ -50,6 +50,62 @@ function parse_args(args)
     return cfg
 end
 
+"""
+    dereference_symlinks!(root) -> (replaced, removed)
+
+Replace every symlink under `root` with a copy of what it points at, and delete the
+ones that point at nothing. Returns how many of each.
+
+This exists for Windows. The payload carries around 500 relative symlinks, nearly all
+of them Julia package sources doing `docs/src/index.md -> ../../README.md`, and they
+have caused two separate failures in the conda build: robocopy could not resolve them
+beneath the extended-length (`\\\\?\\`) path rattler-build supplies, and once that was
+fixed, following them put robocopy into its default million-retry loop. Symlinks are
+second-class on Windows in any case -- creating one needs a privilege an unprivileged
+user installing the package may not have -- so the payload is better off without any.
+
+Left alone on macOS and Linux, where symlinks work and save a little space.
+
+Repeats until a pass finds nothing, because replacing a *directory* symlink copies its
+target in, and the target may itself contain symlinks that were never scanned.
+"""
+function dereference_symlinks!(root::String; max_passes::Int = 8)
+    total_replaced = total_removed = 0
+    for pass in 1:max_passes
+        links = String[]
+        for (dir, dirs, files) in walkdir(root; follow_symlinks = false)
+            for name in Iterators.flatten((dirs, files))
+                p = joinpath(dir, name)
+                islink(p) && push!(links, p)
+            end
+        end
+        isempty(links) && break
+        if pass == max_passes
+            @warn "Still finding symlinks after $max_passes passes; giving up" remaining=length(links)
+            break
+        end
+        # Deepest first, so replacing a directory link cannot invalidate a path
+        # collected from inside it.
+        sort!(links; by = length, rev = true)
+        for p in links
+            target = try
+                realpath(p)
+            catch
+                nothing
+            end
+            rm(p; force = true, recursive = false)
+            if target === nothing || !ispath(target)
+                # A link to nothing is no loss, and copying it is impossible.
+                total_removed += 1
+            else
+                cp(target, p; follow_symlinks = true)
+                total_replaced += 1
+            end
+        end
+    end
+    return total_replaced, total_removed
+end
+
 platform_for(os, arch) =
     os == "macos"   ? MacOS(Symbol(arch)) :
     os == "linux"   ? Linux(Symbol(arch)) :
@@ -133,6 +189,12 @@ function main(args)
 
     install(product.startup_file, joinpath(payload, "etc/julia/startup.jl");
             parameters, force = true)
+
+    if os == "windows"
+        @info "Dereferencing symlinks for Windows"
+        replaced, removed = dereference_symlinks!(payload)
+        @info "Symlinks resolved" replaced removed
+    end
 
     @info "Staged payload" payload version os arch
 

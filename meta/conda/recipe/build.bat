@@ -29,7 +29,13 @@ mkdir "%PAYLOAD_DEST%" 2>nul
 rem /E recurse including empty dirs, /NFL /NDL /NJH /NJS /NP quiet output. robocopy
 rem reports success with exit codes below 8, which cmd would otherwise treat as
 rem failure; anything at 8 or above is a real error.
-robocopy "%PAYLOAD_SRC%\payload" "%PAYLOAD_DEST%" /E /NFL /NDL /NJH /NJS /NP
+rem /R:2 /W:2 is load bearing. robocopy defaults to /R:1000000 /W:30 -- a million
+rem retries thirty seconds apart -- so a single file that fails with a *retryable*
+rem error stops the build for the rest of the job's six hour budget rather than
+rem failing it. That is what a copy step sitting at nearly two hours looked like.
+rem /XJ keeps it from recursing into reparse points, which cannot loop in this tree
+rem today but is free insurance against one appearing.
+robocopy "%PAYLOAD_SRC%\payload" "%PAYLOAD_DEST%" /E /R:2 /W:2 /XJ /NFL /NDL /NJH /NJS /NP
 if %ERRORLEVEL% GEQ 8 (
     echo ERROR: robocopy failed with exit code %ERRORLEVEL%
     exit /b 1
