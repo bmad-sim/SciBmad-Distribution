@@ -14,7 +14,7 @@
 # deliberately no `script:` field naming them.
 
 context:
-  version: ${{ env.get("SCIBMAD_VERSION", default="26.8.26") }}
+  version: ${{ env.get("SCIBMAD_VERSION", default="26.8.29") }}
   payload: ${{ env.get("SCIBMAD_PAYLOAD", default="../../../build/conda/payload") }}
 
 package:
@@ -24,6 +24,20 @@ package:
 source:
   - path: ${{ payload }}
     target_directory: payload
+    # rattler-build otherwise skips anything the repository's .gitignore matches,
+    # and it applies those patterns to the staged payload as well. That silently
+    # dropped `Conda/deps/deps.jl` and `IJulia/deps/deps.jl` -- the two generated
+    # files `meta/patches/` exists to supply -- because .gitignore carries a
+    # `deps/deps.jl` line to keep such build products out of git. IJulia then fails
+    # to precompile on the user's machine with "IJulia not properly installed",
+    # while the DMG/MSIX/Snap builds, which do not go through rattler-build, are
+    # fine. It also removed `build/` and `.CondaPkg/` directories from inside
+    # package sources.
+    #
+    # Nothing in the payload should be filtered: it is a build output, already
+    # exactly what is meant to ship, and the repository's ignore rules have no
+    # bearing on it.
+    use_gitignore: false
 
 build:
   number: 0

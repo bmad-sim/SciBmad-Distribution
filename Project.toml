@@ -1,6 +1,6 @@
 name = "SciBmadDistribution"
 authors = ["The SciBmad Team"]
-version = "26.8.26"
+version = "26.8.29"
 
 [deps]
 ADTypes = "47edcb42-4c32-4615-8424-f2b9edc5f35b"
