@@ -247,8 +247,11 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           path: ./artifacts
-          # Empty for a normal run, which then means "this run's artifacts".
-          run-id: ${{ github.event.inputs.artifacts_from_run }}
+          # Falls back to this run, which is the normal case. It has to be an
+          # explicit id: passing an empty string here is not "unset", it is parsed
+          # as a number, and the job fails with `Fetching artifact list for workflow
+          # run NaN` followed by `Unable to download artifact(s): Not Found`.
+          run-id: ${{ github.event.inputs.artifacts_from_run || github.run_id }}
           github-token: ${{ github.token }}
 
       - uses: prefix-dev/setup-pixi@v0
