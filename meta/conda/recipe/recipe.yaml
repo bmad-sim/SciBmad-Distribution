@@ -14,7 +14,7 @@
 # deliberately no `script:` field naming them.
 
 context:
-  version: ${{ env.get("SCIBMAD_VERSION", default="26.8.29") }}
+  version: ${{ env.get("SCIBMAD_VERSION", default="26.8.30") }}
   payload: ${{ env.get("SCIBMAD_PAYLOAD", default="../../../build/conda/payload") }}
 
 package:
