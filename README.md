@@ -38,12 +38,13 @@ recompiled.
 ## Installation
 
 There are two ways to install: from conda, or from a downloaded installer. Conda is the
-easier one and is recommended.
+easier one and is recommended. The downloaded installer route is documented at the
+very end of this README file.
 
 Note that the distribution ships its own Julia, so Julia does not need to be installed
 separately. The bundled Julia is version 1.12.
 
-### Conda (recommended)
+### Conda Install (recommended)
 
 To install and run SciBmad in a julia session do:
 ```bash
@@ -66,6 +67,16 @@ environment (`~/.local/share/scibmad`, or `%LOCALAPPDATA%\scibmad` on Windows), 
 survive removing and recreating the environment. Set `USER_DATA` before launching to put
 them somewhere else.
 
+### Conda Maintenance 
+
+Useful Conda commands:
+```bash
+conda list | grep scibmad           # List local SciBmad-Distribution version in YY/MM/DD format.
+conda search -c bmad-sim scibmad    # List all SciBmad-Distribution versions on Conda.
+conda update -c bmad-sim scibmad    # Update to latest version.
+conda uninstall -c bmad-sim scibmad # Uninstall.
+```
+
 ## Using the Distribution
 
 - If installed with conda, run `scibmad`. This starts Julia in the terminal.
@@ -73,7 +84,7 @@ them somewhere else.
 - If installed from an installer, run the `SciBmadDistribution` app. This should open a
   Julia window.
 
-- The command `using SciBmad` will load the Distribution.
+- In Julia, the command `using SciBmad` will load the Distribution.
 
 ### Which versions am I running?
 
