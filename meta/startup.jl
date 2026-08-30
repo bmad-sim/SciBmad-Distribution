@@ -92,3 +92,73 @@ if Sys.iswindows() || (Sys.isapple() && Sys.ARCH === :x86_64)
         @warn "Could not declare a Python interpreter for CondaPkg." err
     end
 end
+
+# --- versions() -------------------------------------------------------------
+# `Pkg.status()` is the natural thing to reach for and gives a misleading answer
+# here: the bundled packages live in their own stdlib project, so what it reports
+# is the user's project, which on a fresh install is empty. Reading the bundle's
+# own manifest avoids that, and avoids `Pkg.activate`, which would otherwise
+# leave the session pointing at a read-only project.
+#
+# Defined in `Base` so that it is available unqualified without being shadowed by
+# whatever the user later brings into `Main`, matching how `@infiltrate` is
+# injected above.
+@eval Base begin
+    """
+        versions()
+        versions(pattern; all = false)
+
+    Print the versions of the packages bundled in this distribution.
+
+    By default lists the top-level packages -- the ones the distribution exists to
+    ship. `all = true` includes every dependency as well. `pattern` filters by
+    name, case-insensitively, and implies `all = true`.
+
+        versions()              # the headline packages
+        versions("makie")       # everything matching "makie"
+        versions(all = true)    # the lot, several hundred
+
+    Returns the `name => version` pairs it printed.
+    """
+    function versions(pattern = nothing; all::Bool = false)
+        env = joinpath(Sys.STDLIB, "MainEnv")
+        manifest = joinpath(env, "Manifest.toml")
+        project = joinpath(env, "Project.toml")
+        if !isfile(manifest)
+            @warn "No bundled manifest found; this does not look like a distribution build." manifest
+            return Pair{String,String}[]
+        end
+
+        TOML = Base.require(Base.PkgId(
+            Base.UUID("fa267f1f-6049-4f14-aa54-33bafae1ed76"), "TOML"))
+        deps = Base.invokelatest(TOML.parsefile, manifest)["deps"]
+
+        # A manifest entry is a one-element list holding the package's table. A few
+        # entries -- stdlibs shipped with Julia -- carry no version.
+        pairs = [String(name) => get(entry[1], "version", "stdlib")
+                 for (name, entry) in deps]
+
+        if pattern !== nothing
+            needle = lowercase(String(pattern))
+            filter!(p -> occursin(needle, lowercase(first(p))), pairs)
+        elseif !all
+            if isfile(project)
+                top = keys(Base.invokelatest(TOML.parsefile, project)["deps"])
+                filter!(p -> first(p) in top, pairs)
+            end
+        end
+
+        sort!(pairs; by = first)
+        if isempty(pairs)
+            println("No bundled package matches ", repr(pattern), ".")
+            return pairs
+        end
+        width = maximum(length(first(p)) for p in pairs)
+        for (name, version) in pairs
+            println("  ", rpad(name, width + 2), version)
+        end
+        return pairs
+    end
+
+    export versions
+end

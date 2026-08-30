@@ -112,6 +112,30 @@ instructions for your platform:
 
 - The command `using SciBmad` will load the Distribution.
 
+### Which versions am I running?
+
+`versions()` prints the bundled packages and their versions:
+
+```julia
+julia> versions()
+  ADTypes                     1.24.0
+  AtomicAndPhysicalConstants  0.11.5
+  BeamTracking                0.8.1
+  Beamlines                   0.10.3
+  ...
+  SciBmad                     0.5.2
+```
+
+`versions("makie")` filters by name, and `versions(all = true)` adds every dependency as
+well, several hundred of them. It returns the `name => version` pairs it printed, so the
+result can be used programmatically.
+
+Note that `Pkg.status()` does *not* answer this question. The bundled packages live in
+their own project, so what it reports is your own project, which on a fresh install is
+empty. Use `versions()` instead. And make sure you are running the distribution's Julia --
+`scibmad`, or the app -- rather than another Julia you have installed, which knows nothing
+about any of this.
+
 ## Using the Distribution from Jupyter
 
 `IJulia` is bundled, so the distribution can serve as a Jupyter kernel. Jupyter itself is not
