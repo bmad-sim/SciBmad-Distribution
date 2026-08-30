@@ -66,7 +66,7 @@ environment (`~/.local/share/scibmad`, or `%LOCALAPPDATA%\scibmad` on Windows), 
 survive removing and recreating the environment. Set `USER_DATA` before launching to put
 them somewhere else.
 
-### Installers (Not Recommended!)
+### Direct (non-Conda) Download (Not Recommended!)
 
 Download the appropriate pre-built distribution (MSIX, Snap, or DMG) from the **Assets**
 section on the [releases page](https://github.com/bmad-sim/SciBmad-Distribution/releases)
