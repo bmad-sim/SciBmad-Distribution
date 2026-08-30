@@ -66,43 +66,6 @@ environment (`~/.local/share/scibmad`, or `%LOCALAPPDATA%\scibmad` on Windows), 
 survive removing and recreating the environment. Set `USER_DATA` before launching to put
 them somewhere else.
 
-### Direct (non-Conda) Download (Not Recommended!)
-
-Download the appropriate pre-built distribution (MSIX, Snap, or DMG) from the **Assets**
-section on the [releases page](https://github.com/bmad-sim/SciBmad-Distribution/releases)
-(you may need to expand the Assets dropdown for prerelease versions), then follow the
-instructions for your platform:
-
-- **MSIX (Windows)**: The released bundles are signed with a self-signed certificate, so
-  Windows will not trust them out of the box. Open the MSIX bundle properties and add its
-  certificate to the trusted certificate authorities first (see
-  https://www.advancedinstaller.com/install-test-certificate-from-msix.html). Then
-  double-click the installer and install the app.
-- **Snap (Linux)**: `snap install --classic --dangerous SciBmadDistribution.snap`
-- **DMG (macOS)**: The released bundles are signed with a self-signed certificate, so macOS
-  does not trust them out of the box. In addition, macOS attaches a *quarantine* flag to
-  anything copied out of a downloaded disk image, and Gatekeeper refuses to launch a
-  quarantined app that it cannot verify. To get around the security, 
-  install from the Terminal, substituting the appropriate directory and name of the 
-  dmg file you downloaded in the second line (the other lines do not need to be modified):
-  ```bash
-  sudo rm -rf /Applications/SciBmadDistribution.app
-  hdiutil attach ~/Downloads/scibmaddistribution-26.8.26-aarch64.dmg
-  ditto "/Volumes/SciBmadDistribution Installer/SciBmadDistribution.app" /Applications/SciBmadDistribution.app
-  hdiutil detach "/Volumes/SciBmadDistribution Installer"
-  sudo xattr -dr com.apple.quarantine /Applications/SciBmadDistribution.app
-  sudo chmod -R a-w /Applications/SciBmadDistribution.app
-  ```
-  This may take a minute or two. Note: The `sudo` commands will ask for a password.
-
-  The first line matters when upgrading and is harmless on a first install. `ditto` copies
-  *into* an existing directory rather than replacing it, so any file the old version had and
-  the new one does not survives inside the new bundle. A file that is not in the app's
-  signature is exactly what breaks it: the app then fails to launch with no error at all, in
-  the way described under "Notes" below. Upgrading from a version that bundled a package the
-  new one drops — `Revise` was removed after 26.8.23 — hits this. Deleting the old app first
-  avoids it.
-
 ## Using the Distribution
 
 - If installed with conda, run `scibmad`. This starts Julia in the terminal.
@@ -429,4 +392,44 @@ sudo rm "/Applications/SciBmadDistribution.app/<path from the file added: line>"
 
 Reinstalling also works, but the problem will recur unless the `chmod -R a-w` step from the
 installation instructions is applied.
+
+## Old Stuff
+
+### Direct (non-Conda) Download (Not Recommended!)
+
+Download the appropriate pre-built distribution (MSIX, Snap, or DMG) from the **Assets**
+section on the [releases page](https://github.com/bmad-sim/SciBmad-Distribution/releases)
+(you may need to expand the Assets dropdown for prerelease versions), then follow the
+instructions for your platform:
+
+- **MSIX (Windows)**: The released bundles are signed with a self-signed certificate, so
+  Windows will not trust them out of the box. Open the MSIX bundle properties and add its
+  certificate to the trusted certificate authorities first (see
+  https://www.advancedinstaller.com/install-test-certificate-from-msix.html). Then
+  double-click the installer and install the app.
+- **Snap (Linux)**: `snap install --classic --dangerous SciBmadDistribution.snap`
+- **DMG (macOS)**: The released bundles are signed with a self-signed certificate, so macOS
+  does not trust them out of the box. In addition, macOS attaches a *quarantine* flag to
+  anything copied out of a downloaded disk image, and Gatekeeper refuses to launch a
+  quarantined app that it cannot verify. To get around the security, 
+  install from the Terminal, substituting the appropriate directory and name of the 
+  dmg file you downloaded in the second line (the other lines do not need to be modified):
+  ```bash
+  sudo rm -rf /Applications/SciBmadDistribution.app
+  hdiutil attach ~/Downloads/scibmaddistribution-26.8.26-aarch64.dmg
+  ditto "/Volumes/SciBmadDistribution Installer/SciBmadDistribution.app" /Applications/SciBmadDistribution.app
+  hdiutil detach "/Volumes/SciBmadDistribution Installer"
+  sudo xattr -dr com.apple.quarantine /Applications/SciBmadDistribution.app
+  sudo chmod -R a-w /Applications/SciBmadDistribution.app
+  ```
+  This may take a minute or two. Note: The `sudo` commands will ask for a password.
+
+  The first line matters when upgrading and is harmless on a first install. `ditto` copies
+  *into* an existing directory rather than replacing it, so any file the old version had and
+  the new one does not survives inside the new bundle. A file that is not in the app's
+  signature is exactly what breaks it: the app then fails to launch with no error at all, in
+  the way described under "Notes" below. Upgrading from a version that bundled a package the
+  new one drops — `Revise` was removed after 26.8.23 — hits this. Deleting the old app first
+  avoids it.
+
 
