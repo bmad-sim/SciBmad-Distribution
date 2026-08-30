@@ -45,12 +45,13 @@ separately. The bundled Julia is version 1.12.
 
 ### Conda (recommended)
 
+To install and run SciBmad in a julia session do:
 ```bash
-conda install -c bmad-sim scibmad
+conda install -c bmad-sim scibmad  # Only need to do once.
+scibmad                            # Starts julia
+using scibmad                      # Brings scibmad into scope
 ```
-
-Then run `scibmad` to start Julia with the distribution loaded, or `scibmad script.jl` to
-run a script. `using SciBmad` returns immediately, with no precompilation wait.
+The install may take a minute or two. The `using scibmad` may also take a minute the first time.
 
 This works on Linux (x86-64 and aarch64), macOS (Intel and Apple silicon), and Windows
 (x86-64). Mamba, micromamba and pixi work as well as conda.
@@ -65,7 +66,7 @@ environment (`~/.local/share/scibmad`, or `%LOCALAPPDATA%\scibmad` on Windows), 
 survive removing and recreating the environment. Set `USER_DATA` before launching to put
 them somewhere else.
 
-### Installers
+### Installers (Not Recommended!)
 
 Download the appropriate pre-built distribution (MSIX, Snap, or DMG) from the **Assets**
 section on the [releases page](https://github.com/bmad-sim/SciBmad-Distribution/releases)
