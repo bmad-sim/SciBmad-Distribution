@@ -71,10 +71,10 @@ them somewhere else.
 
 Useful Conda commands:
 ```bash
-conda list | grep scibmad           # List local SciBmad-Distribution version in YY/MM/DD format.
-conda search -c bmad-sim scibmad    # List all SciBmad-Distribution versions on Conda.
-conda update -c bmad-sim scibmad    # Update to latest version.
-conda uninstall -c bmad-sim scibmad # Uninstall.
+conda list | grep scibmad        # Installed version. Versions are YY.M.DD, so 26.8.29 is 2026 August 29.
+conda search -c bmad-sim scibmad # List all versions available on the channel.
+conda update -c bmad-sim scibmad # Update to the latest version.
+conda uninstall scibmad          # Uninstall. No channel needed: it only removes what is installed.
 ```
 
 ## Using the Distribution
