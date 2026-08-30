@@ -149,6 +149,14 @@ IJulia.installkernel("SciBmad Distribution";
                      displayname = "SciBmad Distribution")
 ```
 
+**Registering the kernel is required.** `IJulia.notebook()` starts a Jupyter server but does
+not give it a kernel for this distribution; the notebook then runs whichever other Julia
+kernel you happen to have. That Julia knows nothing about the bundled packages, so
+`using GTPSA` in a notebook recompiles from scratch and reports cache misses like
+`wrong source` and `mismatched flags`. If you see those, the notebook is on the wrong
+kernel. Check with `jupyter kernelspec list` -- the kernel's `argv` should name the
+distribution's own `julia`.
+
 That writes a kernel specification into your own Jupyter data directory (never inside the
 read-only app), pointing at the bundled Julia. `SciBmad Distribution` then appears in Jupyter's
 kernel list and notebooks using it get the whole distribution with no precompilation wait.

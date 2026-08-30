@@ -14,7 +14,59 @@ if isdir(joinpath(last(DEPOT_PATH), "compiled/v$(VERSION.major).$(VERSION.minor)
 else
     include(joinpath(Sys.STDLIB, "AppEnv/src/AppEnv.jl"))
 end
+# --- USER_DATA ---------------------------------------------------------------
+# Under RUNTIME_MODE=MIN -- the conda package; the installers use SANDBOX --
+# AppEnv takes the per-user depot from `USER_DATA`, and falls back to a fresh
+# `mktempdir()` when it is unset. The `bin/scibmad` launcher sets it, so a normal
+# session is fine, but anything that starts the bundled Julia directly does not go
+# through the launcher. A Jupyter kernel is the case that matters: its `argv` names
+# the binary, so the kernel would get a throwaway depot and project, and every
+# package the user installed from a notebook would be gone by the next session.
+#
+# Defaulting it here means any launch behaves the same. The path must stay in step
+# with the launchers in `meta/conda/recipe/build.sh` and `build.bat`; disagreeing
+# would give the shim and a kernel two different persistent depots, which is worse
+# than the temporary one.
+#
+# Only for MIN. Setting it under SANDBOX would move the installers' depot away from
+# the location AppEnv derives for them and orphan whatever is already there.
+try
+    if !haskey(ENV, "USER_DATA") || isempty(ENV["USER_DATA"])
+        config_path = joinpath(dirname(Sys.BINDIR), "config")
+        if isfile(config_path) && occursin(r"RUNTIME_MODE\s*=\s*MIN", read(config_path, String))
+            base = if Sys.iswindows()
+                get(ENV, "LOCALAPPDATA", joinpath(homedir(), "AppData", "Local"))
+            else
+                d = get(ENV, "XDG_DATA_HOME", "")
+                isempty(d) ? joinpath(homedir(), ".local", "share") : d
+            end
+            ENV["USER_DATA"] = joinpath(base, "scibmad")
+            mkpath(ENV["USER_DATA"])
+        end
+    end
+catch err
+    @warn "Could not establish a default USER_DATA directory." err
+end
+
 AppEnv.init()
+
+# --- IJulia ------------------------------------------------------------------
+# `IJulia.installkernel` copies its logo files from `dirname(@__DIR__)` (see
+# `deps/kspec.jl`), which `@__DIR__` freezes at precompile time to the staging
+# directory on the build machine. Registering a kernel therefore fails with an
+# ENOENT naming a path from the CI runner. IJulia reads `IJULIA_DIR` in preference
+# to that constant, so pointing it at wherever the package actually is fixes it
+# without patching IJulia. Same relocation problem the PythonCall patches solve for
+# `ROOT_DIR` and `find_libpython.py`, but with an escape hatch already provided.
+try
+    if !haskey(ENV, "IJULIA_DIR")
+        src = Base.locate_package(Base.PkgId(
+            Base.UUID("7073ff75-c697-5162-941a-fcdaad2a7d2a"), "IJulia"))
+        src === nothing || (ENV["IJULIA_DIR"] = dirname(dirname(src)))
+    end
+catch err
+    @warn "Could not locate IJulia; `IJulia.installkernel` may fail." err
+end
 
 if isnothing(Base.ACTIVE_PROJECT[])
     Base.ACTIVE_PROJECT[] = AppEnv.USER_DATA
