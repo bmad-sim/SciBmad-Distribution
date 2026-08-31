@@ -155,9 +155,28 @@ not give it a kernel for this distribution.
 The default Julia kernel knows nothing about the bundled packages, so
 `using GTPSA` in a notebook not using the SciBmad-Distribution kernel 
 recompiles from scratch and reports cache misses like `wrong source` and `mismatched flags`. 
-If you see those, the notebook is using the wrong kernel. 
-Check with `jupyter kernelspec list` -- the kernel's `argv` should name the
-distribution's own `julia`.
+If you see those, the notebook is using the wrong kernel.
+
+Which kernel a notebook is using is shown in the top right of the notebook window, and can
+be changed from the *Kernel* menu. To see what is registered, run this in a terminal --
+not in a notebook cell and not in Julia:
+
+```bash
+jupyter kernelspec list
+```
+
+That prints each registered kernel and the directory holding its `kernel.json`. It does not
+show which Julia a kernel points at; for that, look at the `argv` in that `kernel.json`, or
+ask for the whole specification at once:
+
+```bash
+jupyter kernelspec list --json
+```
+
+The `argv` of the `scibmad-distribution` kernel should name the distribution's own `julia`
+-- a path ending in `libexec/scibmad/bin/julia` for a conda install, or one inside
+`SciBmadDistribution.app` for the macOS installer. If it names some other Julia, the kernel
+was registered from the wrong one: re-run `installkernel` from the distribution.
 
 Both keyword arguments are needed. Left to itself `installkernel` appends the running Julia's
 `major.minor` to the name it is given, so `installkernel("SciBmad")` produces the kernel
