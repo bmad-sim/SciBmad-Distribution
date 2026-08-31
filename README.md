@@ -50,9 +50,9 @@ To install and run SciBmad in a julia session do:
 ```bash
 conda install -c bmad-sim scibmad  # Only need to do once.
 scibmad                            # Starts julia
-using scibmad                      # Brings scibmad into scope
+using SciBmad                      # Brings scibmad into scope
 ```
-The install may take a minute or two. The `using scibmad` may also take a minute the first time.
+The install may take a minute or two. The `using SciBmad` may also take a minute the first time.
 
 This works on Linux (x86-64 and aarch64), macOS (Intel and Apple silicon), and Windows
 (x86-64). Mamba, micromamba and pixi work as well as conda.
@@ -94,7 +94,7 @@ julia> Sys.BINDIR
 When using the Distribution executable, the result is something like:
 ```julia
 julia> Sys.BINDIR
-"/Users/dcs16/miniconda3/libexec/scibmad/bin"
+"/Users/dcs32/miniconda3/libexec/scibmad/bin"
 ```
 
 Packages the user installs with `Pkg` go in a per-user directory outside the conda
