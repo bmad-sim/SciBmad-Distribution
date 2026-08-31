@@ -91,7 +91,7 @@ using the command `Sys.BINDIR`. The result when running standard Julia is someth
 julia> Sys.BINDIR
 "/Users/dcs32/.julia/juliaup/julia-1.12.7+0.aarch64.apple.darwin14/Julia-1.12.app/Contents/Resources/julia/bin"
 ```
-When using the Distribution the result is something like:
+When using the Distribution executable, the result is something like:
 ```julia
 julia> Sys.BINDIR
 "/Users/dcs16/miniconda3/libexec/scibmad/bin"
@@ -115,6 +115,7 @@ julia> versions()
   ...
   SciBmad                     0.5.2
 ```
+Note: `versions` is only defined when using the Distribution executable.
 
 `versions("makie")` filters by name, and `versions(all = true)` adds every dependency as
 well, several hundred of them. It returns the `name => version` pairs it printed, so the
