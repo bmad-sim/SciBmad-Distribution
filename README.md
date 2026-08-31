@@ -5,7 +5,7 @@ toolkit for charged particle beam dynamics. Besides SciBmad, this distribution b
 packages and their dependencies.
 A list of these additional packages is in the `Project.toml` file.
 
-Install this distribution (see below), launch Julia, and `using SciBmad` returns
+Install this distribution (see below), launch the Distribution executable, and `using SciBmad` returns
 immediately: no package installation, no first-use compilation wait.
 Additional packages can still be installed with Pkg without triggering recompilation of the bundled ones.
 
@@ -37,8 +37,8 @@ recompiled.
 
 ## Installation
 
-There are two ways to install: from conda, or from a downloaded installer. Conda is the
-easier one and is recommended. The downloaded installer route is documented at the
+There are two ways to install: from conda, or from a app installer. Conda is the
+easier one and is recommended. The app installer route is documented at the
 very end of this README file.
 
 Note that the distribution ships its own Julia, so Julia does not need to be installed
@@ -57,16 +57,6 @@ The install may take a minute or two. The `using scibmad` may also take a minute
 This works on Linux (x86-64 and aarch64), macOS (Intel and Apple silicon), and Windows
 (x86-64). Mamba, micromamba and pixi work as well as conda.
 
-Conda is recommended because the installers below are signed with a self-signed
-certificate, which both Windows and macOS refuse to trust without the manual steps
-described there. A conda package carries no signature for them to reject. Updating is
-also `conda update -c bmad-sim scibmad` rather than downloading a fresh installer.
-
-Packages the user installs with `Pkg` go in a per-user directory outside the conda
-environment (`~/.local/share/scibmad`, or `%LOCALAPPDATA%\scibmad` on Windows), so they
-survive removing and recreating the environment. Set `USER_DATA` before launching to put
-them somewhere else.
-
 ### Conda Maintenance 
 
 Useful Conda commands:
@@ -83,21 +73,7 @@ A conda version looks like `0.5.2+26.09.01`. The first part is the version of `S
 itself; the part after the `+` is the date the distribution was built, as `YY.MM.DD` with
 month and day zero-padded. So `0.5.2+26.09.01` is SciBmad 0.5.2, built on 1 September 2026.
 
-Both halves matter. The same SciBmad version gets rebuilt whenever anything else in the
-distribution changes -- another bundled package, a patch, the launcher -- and the date is
-what distinguishes those. Conda orders them the way you would expect: `0.5.2+26.8.30` is
-older than `0.5.2+26.08.31`, and both are older than `0.5.3+26.09.01`, so `conda update`
-always moves forward.
-
-The padding is a convention rather than a formatting nicety, and the release workflow
-enforces it. Conda compares version segments as numbers, so `26.08.30` and `26.8.30` are
-*equal* to it rather than adjacent -- publishing both would leave two packages that
-`conda update` cannot order.
-
-The installers use the bare date, without the SciBmad version, because Windows requires a
-purely numeric version in an MSIX manifest.
-
-## Using the Distribution
+## Running the Distribution
 
 - If installed with conda, run `scibmad`. This starts Julia in the terminal.
 
@@ -105,6 +81,26 @@ purely numeric version in an MSIX manifest.
   Julia window.
 
 - In Julia, the command `using SciBmad` will load the Distribution.
+
+The `Distribution` bundles SciBmad, associated packages, and Julia itself into one binary executable.
+When you startup Julia with the command `scibmad`, you are running the Distribution binary.
+If you startup Julia with the command `julia`, you are running the standard Julia binary.
+It is important not to confuse the two. When you are in Julia, you can see which binary is being used
+using the command `Sys.BINDIR`. The result when running standard Julia is something like:
+```julia
+julia> Sys.BINDIR
+"/Users/dcs32/.julia/juliaup/julia-1.12.7+0.aarch64.apple.darwin14/Julia-1.12.app/Contents/Resources/julia/bin"
+```
+When using the Distribution the result is something like:
+```julia
+julia> Sys.BINDIR
+"/Users/dcs16/miniconda3/libexec/scibmad/bin"
+```
+
+Packages the user installs with `Pkg` go in a per-user directory outside the conda
+environment (`~/.local/share/scibmad`, or `%LOCALAPPDATA%\scibmad` on Windows), so they
+survive removing and recreating the environment. Set `USER_DATA` before launching to put
+them somewhere else.
 
 ### Which versions am I running?
 
@@ -130,84 +126,49 @@ empty. Use `versions()` instead. And make sure you are running the distribution'
 `scibmad`, or the app -- rather than another Julia you have installed, which knows nothing
 about any of this.
 
-## Using the Distribution from Jupyter
+## Setting up the Distribution for use from Jupyter
 
-`IJulia` is bundled, so the distribution can serve as a Jupyter kernel. Jupyter itself is not
-bundled — use whichever installation you already have. Register a kernel once, from inside the
-distribution:
+`IJulia` is bundled, so the Distribution can serve as a Jupyter **kernel**. Jupyter itself is not
+bundled — use whichever Jupyter installation you already have. 
 
+If Jupyter is not yet installed, install with the command:
+```bash
+conda install -c conda-forge jupyterlab   # or: pip install jupyterlab
+```
+
+**Registering the kernel with installkernel is required.** 
+To register the Distribution kernel do the following after running the `scibmad` binary 
+(and not the standard julia binary!):
 ```julia
 using IJulia
 installkernel("SciBmad Distribution";     # Register the SciBmad-Distribution kernel
                      specname = "scibmad-distribution",
                      displayname = "SciBmad Distribution")
-notebook()                                # Starts Jupyter server in browser or can use...
-jupyterlab()                              #   the more modern interface.
 ```
+This registration only needs to be done once and only needs to be redone if the registration is
+deleted or a different Conda environment is used.
 
-The `installkernel` function writes a kernel specification into your own Jupyter data directory
-and not inside the installation itself. With this, `SciBmad Distribution` then appears in Jupyter's
-kernel list and notebooks using it get the whole distribution with no precompilation wait.
-
-**Registering the kernel with installkernel is required.** 
-`notebook()` or `jupyterlab()` start a Jupyter server but does
-not give it a kernel for this distribution. 
-The default Julia kernel knows nothing about the bundled packages, so
-`using GTPSA` in a notebook not using the SciBmad-Distribution kernel 
-recompiles from scratch and reports cache misses like `wrong source` and `mismatched flags`. 
-If you see those, the notebook is using the wrong kernel.
-
+The `installkernel` function writes a kernel specification into the Jupyter data directory
+and not inside the Distribution itself. With this, `SciBmad Distribution` appears in Jupyter's
+kernel list and using this kernel with a notebook eliminates any precompilation wait.
 Which kernel a notebook is using is shown in the top right of the notebook window, and can
-be changed from the *Kernel* menu. To see what is registered, run this in a terminal --
-not in a notebook cell and not in Julia:
-
+be changed from the *Kernel* menu. To see what kernels are registered, run this in a Unix
+command line:
 ```bash
-jupyter kernelspec list
+jupyter kernelspec list | grep -B 1 -A 3 resource_dir
 ```
-
-That prints each registered kernel and the directory holding its `kernel.json`. It does not
-show which Julia a kernel points at; for that, look at the `argv` in that `kernel.json`, or
-ask for the whole specification at once:
-
-```bash
-jupyter kernelspec list --json
-```
-
-The `argv` of the `scibmad-distribution` kernel should name the distribution's own `julia`
--- a path ending in `libexec/scibmad/bin/julia` for a conda install, or one inside
-`SciBmadDistribution.app` for the macOS installer. If it names some other Julia, the kernel
-was registered from the wrong one: re-run `installkernel` from the distribution.
-
-Both keyword arguments are needed. Left to itself `installkernel` appends the running Julia's
-`major.minor` to the name it is given, so `installkernel("SciBmad")` produces the kernel
-`scibmad-1.12`, displayed as `SciBmad 1.12`. That reads as SciBmad version 1.12, which it is
-not — it is the Julia version. Setting `specname` and `displayname` explicitly keeps the version
-out of the name entirely, which is also what makes re-registering after an upgrade overwrite the
-existing kernel in place rather than leaving a second one behind pointing at the old install.
-
-Two more things to know. Register the kernel from the distribution itself -- `scibmad`, or the
-app -- rather than from another Julia:
-a kernel is only useful if its `argv` names the bundled binary, and `installkernel` records
-whichever Julia is running it. And a kernel specification is just a file keyed by `specname`, so
-registering the same name from two different Julia installations means the second silently
-replaces the first — this is why the distribution's kernel is not called `Julia`, which is the
-name an ordinary IJulia install claims.
+This prints a list of registered kernels and the associated paths to the kernels.
 
 ### Starting Jupyter
 
-`IJulia.notebook()` and `IJulia.jupyterlab()` start Jupyter from inside the distribution.
-Both require `jupyter` to be installed already and on your `PATH`. The distribution bundles
-`IJulia`, which is the Julia half of the connection, but not Jupyter itself. If you do not
-have it:
-
-```bash
-conda install -c conda-forge jupyterlab   # or: pip install jupyterlab
+Since the Distribution kernel is registered directly with Jupyter,
+Jupyter can be started from either the standard Julia executable (using the `julia` command)
+or the Distribution executable (using the `scibmad` command) with:
+```julia
+using IJulia
+notebook()                                # Starts Jupyter server in browser or can use...
+jupyterlab()                              #   the more modern interface.
 ```
-
-A stock IJulia install would offer to install Jupyter for you when it cannot find one. That
-does not happen here, and if `jupyter` is missing these calls simply fail rather than
-installing anything.
-
 Starting Jupyter this way still does not choose a kernel for you. Pick
 `SciBmad Distribution` from the kernel list once the notebook opens, or the notebook runs
 whatever kernel it defaults to.
@@ -464,7 +425,14 @@ installation instructions is applied.
 
 ## Old Stuff
 
-### Direct (non-Conda) Download (Not Recommended!)
+### App Installation (Not Recommended!)
+
+Conda is recommended because the app installers below are signed with a self-signed
+certificate, which both Windows and macOS refuse to trust without the manual steps
+described there. A conda package carries no signature for them to reject. 
+
+The app installation installs an app into the standard area. Startup means running the app
+instead of using the `scibmad` command from the terminal with a Conda install.
 
 Download the appropriate pre-built distribution (MSIX, Snap, or DMG) from the **Assets**
 section on the [releases page](https://github.com/bmad-sim/SciBmad-Distribution/releases)
