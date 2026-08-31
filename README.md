@@ -214,6 +214,12 @@ whatever kernel it defaults to.
   records the Julia version the build dependencies were resolved against, and the
   release workflow installs exactly the versions it pins.
 
+- **Delete the previous release from anaconda.org before publishing a new one.** The channel's
+  storage quota is about 10 GiB and a release is about 5 GiB, so only two fit.
+  A push to Anaconda.org that that would lift the storage over the limit fails with
+  `402 Payment Required` after every platform has built,
+   and leaves a version on the channel with no files under it. See Issue #32.
+
 - In GitHub under the `Actions` menu, press `Build Release Assets` and then `Run workflow`. 
   To have the bundles attached to a release, put the tag of an existing release in the optional
   `Release tag to upload to` field; left empty, the run only leaves the bundles as workflow
@@ -225,11 +231,6 @@ whatever kernel it defaults to.
 The conda package is built and published by a separate workflow from the installers, in
 `.github/workflows/Conda.yml`, from the recipe and staging driver under `meta/conda/`. It
 publishes to the `bmad-sim` channel on anaconda.org.
-
-**Delete the previous release from anaconda.org before publishing a new one.** The channel's
-storage quota is about 10 GiB and a release is about 5 GiB, so only two fit. A publish that
-exceeds it fails with `402 Payment Required` after every platform has built, and leaves a
-version on the channel with no files under it. See #32.
 
 To publish a release: in GitHub under `Actions`, press `Build and Publish Conda Packages`,
 then `Run workflow`, and tick `publish`. Left unticked, the run builds and tests every
