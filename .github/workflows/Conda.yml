@@ -205,6 +205,18 @@ jobs:
             exit 1
           fi
 
+          # The date is written YY.MM.DD with both fields zero-padded, so that every
+          # version is the same width and sorts the same by eye as it does by number.
+          # Conda compares the segments numerically and so cannot tell 26.08.30 from
+          # 26.8.30 -- they are equal, not adjacent -- which is exactly why the two
+          # forms must not both be used: two such packages on the channel would be
+          # indistinguishable to `conda update`. Checked rather than trusted, because
+          # the version is hand-edited in Project.toml.
+          if ! printf '%s' "$dist" | grep -Eq '^[0-9]{2}\.[0-9]{2}\.[0-9]{2}$'; then
+            echo "::error::Project.toml version '$dist' is not YY.MM.DD with zero-padded month and day (e.g. 26.09.01)."
+            exit 1
+          fi
+
           version="${scibmad}+${dist}"
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "SciBmad $scibmad, distribution $dist -> conda version $version"
