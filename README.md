@@ -226,6 +226,11 @@ The conda package is built and published by a separate workflow from the install
 `.github/workflows/Conda.yml`, from the recipe and staging driver under `meta/conda/`. It
 publishes to the `bmad-sim` channel on anaconda.org.
 
+**Delete the previous release from anaconda.org before publishing a new one.** The channel's
+storage quota is about 10 GiB and a release is about 5 GiB, so only two fit. A publish that
+exceeds it fails with `402 Payment Required` after every platform has built, and leaves a
+version on the channel with no files under it. See #32.
+
 To publish a release: in GitHub under `Actions`, press `Build and Publish Conda Packages`,
 then `Run workflow`, and tick `publish`. Left unticked, the run builds and tests every
 platform and leaves the packages as workflow artifacts, which is the way to check a change
