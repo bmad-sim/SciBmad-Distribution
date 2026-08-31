@@ -138,21 +138,25 @@ distribution:
 
 ```julia
 using IJulia
-IJulia.installkernel("SciBmad Distribution";
+installkernel("SciBmad Distribution";     # Register the SciBmad-Distribution kernel
                      specname = "scibmad-distribution",
                      displayname = "SciBmad Distribution")
+notebook()                                # Starts Jupyter server in browser or can use...
+jupyterlab()                              #   the more modern interface.
 ```
 
-That writes a kernel specification into your own Jupyter data directory, never inside the
-installation itself, pointing at the bundled Julia. `SciBmad Distribution` then appears in Jupyter's
+The `installkernel` function writes a kernel specification into your own Jupyter data directory
+and not inside the installation itself. With this, `SciBmad Distribution` then appears in Jupyter's
 kernel list and notebooks using it get the whole distribution with no precompilation wait.
 
-**Registering the kernel is required.** `IJulia.notebook()` starts a Jupyter server but does
-not give it a kernel for this distribution; the notebook then runs whichever other Julia
-kernel you happen to have. That Julia knows nothing about the bundled packages, so
-`using GTPSA` in a notebook recompiles from scratch and reports cache misses like
-`wrong source` and `mismatched flags`. If you see those, the notebook is on the wrong
-kernel. Check with `jupyter kernelspec list` -- the kernel's `argv` should name the
+**Registering the kernel with installkernel is required.** 
+`notebook()` or `jupyterlab()` start a Jupyter server but does
+not give it a kernel for this distribution. 
+The default Julia kernel knows nothing about the bundled packages, so
+`using GTPSA` in a notebook not using the SciBmad-Distribution kernel 
+recompiles from scratch and reports cache misses like `wrong source` and `mismatched flags`. 
+If you see those, the notebook is using the wrong kernel. 
+Check with `jupyter kernelspec list` -- the kernel's `argv` should name the
 distribution's own `julia`.
 
 Both keyword arguments are needed. Left to itself `installkernel` appends the running Julia's
