@@ -171,18 +171,43 @@ jobs:
         shell: bash
         run: pixi global install rattler-build
 
+      # The conda version is `<SciBmad version>+<distribution date>`, e.g.
+      # `0.5.2+26.8.31`. On its own the date says nothing about what a user is
+      # actually getting, which is the complaint in #31; leading with the SciBmad
+      # version answers "which SciBmad is this?" from `conda list` alone.
+      #
+      # `+` and not `-`. Conda splits package filenames from the right into
+      # name-version-build, so `scibmad-0.5.2-26.8.31-h0_0.conda` would parse its
+      # name as `scibmad-0.5.2`. `+` is conda's local-version separator and parses
+      # and orders correctly: 0.5.2+26.8.30 < 0.5.2+26.8.31 < 0.5.3+26.8.01, and
+      # the numeric segments compare as numbers, so +26.8.9 < +26.8.10.
+      #
+      # Only the conda package is renamed. `Project.toml` keeps its plain date
+      # because the MSIX manifest renders `Version="{{APP_VERSION}}.{{BUILD_NUMBER}}"`
+      # and Windows requires four numeric parts there, which a `+` would break.
       - name: Read version
         id: version
         shell: bash
         run: |
-          version=$(julia --project=meta -e '
+          dist=$(julia --project=meta -e '
             import AppBundler
             using AppBundler: Resources, get_bundle_parameters!
             prefs = Resources.get_project_preferences(pwd())["AppBundler"]
             p = get_bundle_parameters!(Dict{String,Any}(), "Project.toml"; preferences = prefs)
             print(p["APP_VERSION"])')
+
+          # The payload's `index` is uuid/name/version/path, tab separated, and
+          # covers every bundled package -- no guessing at the stdlib version
+          # directory, and no second Julia start.
+          scibmad=$(awk -F'\t' '$2=="SciBmad"{print $3}' build/conda/payload/index)
+          if [ -z "$scibmad" ]; then
+            echo "::error::No SciBmad entry in build/conda/payload/index; cannot compose the version."
+            exit 1
+          fi
+
+          version="${scibmad}+${dist}"
           echo "version=$version" >> "$GITHUB_OUTPUT"
-          echo "Building conda package version $version"
+          echo "SciBmad $scibmad, distribution $dist -> conda version $version"
 
       - name: Build conda package
         shell: bash

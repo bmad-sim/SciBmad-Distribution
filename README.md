@@ -71,11 +71,26 @@ them somewhere else.
 
 Useful Conda commands:
 ```bash
-conda list | grep scibmad        # Installed version. Versions are YY.M.DD, so 26.8.29 is 2026 August 29.
+conda list | grep scibmad        # Installed version, e.g. 0.5.2+26.8.31 -- see "Version numbers" below.
 conda search -c bmad-sim scibmad # List all versions available on the channel.
 conda update -c bmad-sim scibmad # Update to the latest version.
 conda uninstall scibmad          # Uninstall. No channel needed: it only removes what is installed.
 ```
+
+### Version numbers
+
+A conda version looks like `0.5.2+26.8.31`. The first part is the version of `SciBmad`
+itself; the part after the `+` is the date the distribution was built, as `YY.M.DD`. So
+`0.5.2+26.8.31` is SciBmad 0.5.2, built on 31 August 2026.
+
+Both halves matter. The same SciBmad version gets rebuilt whenever anything else in the
+distribution changes -- another bundled package, a patch, the launcher -- and the date is
+what distinguishes those. Conda orders them the way you would expect: `0.5.2+26.8.30` is
+older than `0.5.2+26.8.31`, and both are older than `0.5.3+26.8.01`, so `conda update`
+always moves forward.
+
+The installers use the bare date, without the SciBmad version, because Windows requires a
+purely numeric version in an MSIX manifest.
 
 ## Using the Distribution
 
