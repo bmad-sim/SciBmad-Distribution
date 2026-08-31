@@ -138,6 +138,10 @@ IJulia.installkernel("SciBmad Distribution";
                      displayname = "SciBmad Distribution")
 ```
 
+That writes a kernel specification into your own Jupyter data directory, never inside the
+installation itself, pointing at the bundled Julia. `SciBmad Distribution` then appears in Jupyter's
+kernel list and notebooks using it get the whole distribution with no precompilation wait.
+
 **Registering the kernel is required.** `IJulia.notebook()` starts a Jupyter server but does
 not give it a kernel for this distribution; the notebook then runs whichever other Julia
 kernel you happen to have. That Julia knows nothing about the bundled packages, so
@@ -146,28 +150,39 @@ kernel you happen to have. That Julia knows nothing about the bundled packages, 
 kernel. Check with `jupyter kernelspec list` -- the kernel's `argv` should name the
 distribution's own `julia`.
 
-That writes a kernel specification into your own Jupyter data directory (never inside the
-read-only app), pointing at the bundled Julia. `SciBmad Distribution` then appears in Jupyter's
-kernel list and notebooks using it get the whole distribution with no precompilation wait.
-
 Both keyword arguments are needed. Left to itself `installkernel` appends the running Julia's
 `major.minor` to the name it is given, so `installkernel("SciBmad")` produces the kernel
 `scibmad-1.12`, displayed as `SciBmad 1.12`. That reads as SciBmad version 1.12, which it is
 not — it is the Julia version. Setting `specname` and `displayname` explicitly keeps the version
 out of the name entirely, which is also what makes re-registering after an upgrade overwrite the
-existing kernel in place rather than leaving a second one behind pointing at the old app.
+existing kernel in place rather than leaving a second one behind pointing at the old install.
 
-Two more things to know. Register the kernel from the app itself rather than from another Julia:
+Two more things to know. Register the kernel from the distribution itself -- `scibmad`, or the
+app -- rather than from another Julia:
 a kernel is only useful if its `argv` names the bundled binary, and `installkernel` records
 whichever Julia is running it. And a kernel specification is just a file keyed by `specname`, so
 registering the same name from two different Julia installations means the second silently
 replaces the first — this is why the distribution's kernel is not called `Julia`, which is the
 name an ordinary IJulia install claims.
 
-`IJulia.notebook()` and `IJulia.jupyterlab()` also work, provided `jupyter` is on `PATH`; the
-patch below makes IJulia look it up at run time. They cannot fall back to installing Jupyter
-through Conda the way a normal IJulia install does, because that would have to write inside
-the read-only bundle.
+### Starting Jupyter
+
+`IJulia.notebook()` and `IJulia.jupyterlab()` start Jupyter from inside the distribution.
+Both require `jupyter` to be installed already and on your `PATH`. The distribution bundles
+`IJulia`, which is the Julia half of the connection, but not Jupyter itself. If you do not
+have it:
+
+```bash
+conda install -c conda-forge jupyterlab   # or: pip install jupyterlab
+```
+
+A stock IJulia install would offer to install Jupyter for you when it cannot find one. That
+does not happen here, and if `jupyter` is missing these calls simply fail rather than
+installing anything.
+
+Starting Jupyter this way still does not choose a kernel for you. Pick
+`SciBmad Distribution` from the kernel list once the notebook opens, or the notebook runs
+whatever kernel it defaults to.
 
 # For Maintainers:
 
