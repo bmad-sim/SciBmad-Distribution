@@ -37,7 +37,7 @@ recompiled.
 
 ## Installation
 
-There are two ways to install: from conda, or from a app installer. Conda is the
+There are two ways to install: from conda, or from an app installer. Conda is the
 easier one and is recommended. The app installer route is documented at the
 very end of this README file.
 
@@ -50,7 +50,7 @@ To install and run SciBmad in a julia session do:
 ```bash
 conda install -c bmad-sim scibmad  # Only need to do once.
 scibmad                            # Starts julia
-using SciBmad                      # Brings scibmad into scope
+using SciBmad                      # Brings SciBmad into scope
 ```
 The install may take a minute or two. The `using SciBmad` may also take a minute the first time.
 
