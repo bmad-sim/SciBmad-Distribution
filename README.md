@@ -52,7 +52,7 @@ conda install -c bmad-sim scibmad  # Only need to do once.
 scibmad                            # Starts julia
 using SciBmad                      # Brings SciBmad into scope
 ```
-The install may take a minute or two. The `using SciBmad` may also take a minute the first time.
+**The install may take a minute or two.** Also the `using SciBmad` command may take a minute the first time.
 
 This works on Linux (x86-64 and aarch64), macOS (Intel and Apple silicon), and Windows
 (x86-64). Mamba, micromamba and pixi work as well as conda.
