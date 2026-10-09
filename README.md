@@ -31,7 +31,7 @@ recompiled.
 - **Interactive tooling**: `Infiltrator` (loaded automatically by `meta/startup.jl` in
   interactive sessions)
 - **Notebooks**: `IJulia`, so the bundled Julia can be used as a Jupyter kernel (see
-  "Using the Distribution from Jupyter" below)
+  "Setting up the Distribution for use from Jupyter" below)
 - **Python interoperability**: `PythonCall`, together with the `Python_jll` interpreter it
   runs against
 
@@ -159,6 +159,23 @@ command line:
 jupyter kernelspec list | grep -B 1 -A 3 resource_dir
 ```
 This prints a list of registered kernels and the associated paths to the kernels.
+
+### Multithreaded kernel
+
+The kernel registered above runs Julia with a single thread. To get a multithreaded kernel,
+pass Julia's `--threads` option to `installkernel`. As before, run this from the `scibmad`
+binary:
+```julia
+using IJulia
+installkernel("SciBmad Distribution", "--threads=auto";   # One thread per CPU core
+                     specname = "scibmad-distribution-threads",
+                     displayname = "SciBmad Distribution (threads)")
+```
+Instead of `auto`, a fixed thread count can be given, for example `"--threads=4"`. Using a
+different `specname` from the single threaded kernel registers this as a second kernel, so
+both appear in Jupyter's kernel list. Reusing `specname = "scibmad-distribution"` instead
+replaces the single threaded kernel. To check the thread count, run `Threads.nthreads()` in
+a notebook using the kernel.
 
 ### Starting Jupyter
 
