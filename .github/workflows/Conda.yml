@@ -255,10 +255,21 @@ jobs:
       # under Rosetta, and neither tells us what the test is for -- that the package
       # works on the machine it is meant for. That one target is covered by the DMG
       # workflow's own build and by installing from the channel once published.
+      #
+      # On Windows the test environment goes on D:. rattler-build unpacks the package
+      # into TEMP, which is on C:, and C: on these runners has only ~26G free to start
+      # with. A build that cannot reuse the cached depot compiles ~14G onto C: (the
+      # depot lives in the user profile), and the unpacked payload then no longer fits:
+      # `Failed to copy test files: ... not enough space on the disk (os error 112)`.
+      # D: holds the workspace and has 200G+ free.
       - name: Test the built package
         if: '!(matrix.os == ''macos'' && matrix.arch == ''x86_64'')'
         shell: bash
         run: |
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            mkdir -p /d/tmp
+            export TEMP='D:\tmp' TMP='D:\tmp'
+          fi
           pkg=$(ls build/conda/pkg/${{ matrix.subdir }}/*.conda | head -1)
           echo "Testing $pkg"
           rattler-build test --package-file "$pkg"
