@@ -327,7 +327,22 @@ jobs:
             echo "::error::ANACONDA_API_TOKEN secret is not set; cannot publish."
             exit 1
           fi
+          # Files already on the channel are skipped, so that a publish that failed
+          # partway (e.g. the channel hit its storage limit after four of five
+          # uploads) can be finished by republishing the same run's artifacts with
+          # `artifacts_from_run`. Without this the first already-uploaded file
+          # aborts the loop before the missing ones are reached. Matching is by
+          # `<subdir>/<filename>`, which includes the build hash, so a rebuilt
+          # package with the same version is not skipped -- it still fails below.
+          # A 404 means the package does not exist on the channel yet.
+          existing=$(curl -sf https://api.anaconda.org/package/bmad-sim/scibmad/files \
+            | jq -r '.[].basename' || true)
           find artifacts -name '*.conda' -print0 | while IFS= read -r -d '' pkg; do
+            key="$(basename "$(dirname "$pkg")")/$(basename "$pkg")"
+            if grep -qxF "$key" <<< "$existing"; then
+              echo "Skipping $key: already on the channel"
+              continue
+            fi
             echo "Uploading $pkg"
             # No --force. Overwriting a version already on the channel replaces a
             # package people may have installed, silently and with no record that
