@@ -22,7 +22,8 @@ recompiled.
 - **Differentiation and arrays**: `ADTypes`, `DifferentiationInterface`, `ForwardDiff`,
   `ReverseDiff`, `FiniteDiff`, `StaticArrays`, `TypedTables`, `PreallocationTools`
 - **Optimization and solvers**: `Optim`, `NLSolversBase`, `OptimizationOptimJL`,
-  `OptimizationLBFGSB`, `NonlinearSolve`, `Metaheuristics`, `Sobol`
+  `OptimizationLBFGSB`, `NonlinearSolve`, `Metaheuristics`, `Sobol`,
+  `QuasiMonteCarlo`
 - **Statistics**: `Distributions`, `Turing`
 - **Plotting**: `Makie` with the `CairoMakie`, `GLMakie` and `WGLMakie` backends, plus `Plots`
   and `LaTeXStrings`
