@@ -2,7 +2,7 @@
 
 julia_version = "1.12.7"
 manifest_format = "2.0"
-project_hash = "7812dbc95b18efe9684234b530e87153f8b89dd1"
+project_hash = "60d7ef8b054ca72274dc986d5e7b0b8ba1b8c67c"
 
 [[deps.ADTypes]]
 deps = ["PrecompileTools"]
@@ -320,9 +320,9 @@ version = "1.4.0"
 
 [[deps.BatchSolve]]
 deps = ["ADTypes", "Accessors", "ArrayInterface", "DifferentiationInterface", "FiniteDiff", "ForwardDiff", "KernelAbstractions", "LinearAlgebra", "Printf", "Reexport", "SparseArrays", "SparseMatrixColorings", "StaticArrays"]
-git-tree-sha1 = "63c1875703ae91c1fd0e0661148067fcc7ad8b11"
+git-tree-sha1 = "ea619878520cf2007a31294ba6da48bf87b6da29"
 uuid = "87e15b6a-8d99-4cf4-8ad5-fed92cf0c427"
-version = "0.1.3"
+version = "0.1.5"
 
     [deps.BatchSolve.extensions]
     BatchSolveCUDAExt = "CUDA"
@@ -334,9 +334,9 @@ version = "0.1.3"
 
 [[deps.BeamTracking]]
 deps = ["Accessors", "Adapt", "AtomicAndPhysicalConstants", "EnumX", "ForwardDiff", "GTPSA", "HostCPUFeatures", "KernelAbstractions", "LinearAlgebra", "MacroTools", "Random", "ReferenceFrameRotations", "SIMD", "SIMDMathFunctions", "SpecialFunctions", "StaticArrays", "Statistics", "TPSAInterface", "Unrolled"]
-git-tree-sha1 = "5364b7cb5b3689dae38dfc16e6e29379d49297fd"
+git-tree-sha1 = "8b35504eedc8876850760a86e287aebf5cd3ba4f"
 uuid = "8ef5c10a-4ca3-437f-8af5-b84d8af36df0"
-version = "0.8.1"
+version = "0.8.7"
 
     [deps.BeamTracking.extensions]
     BeamTrackingBeamlinesExt = "Beamlines"
@@ -347,9 +347,9 @@ version = "0.8.1"
 
 [[deps.Beamlines]]
 deps = ["Accessors", "AtomicAndPhysicalConstants", "DataStructures", "EnumX", "FunctionWrappers", "LinearAlgebra", "MacroTools", "OrderedCollections", "PrettyTables", "ReadOnlyArrays", "StaticArrays"]
-git-tree-sha1 = "cc9530d8021f65bbba2ebcea53a30c8466b89ef1"
+git-tree-sha1 = "a659b597c987d84833335c953ff00b2b15601fd3"
 uuid = "5bb90b03-0719-46b8-8ce4-1ef3afd3cd4b"
-version = "0.10.3"
+version = "0.11.0"
 weakdeps = ["ForwardDiff", "GTPSA", "PythonCall", "ReverseDiff"]
 
     [deps.Beamlines.extensions]
@@ -2144,9 +2144,9 @@ version = "1.3.0"
 
 [[deps.NonlinearNormalForm]]
 deps = ["DataStructures", "DelimitedFiles", "LinearAlgebra", "Printf", "Reexport", "ReferenceFrameRotations", "SkewLinearAlgebra", "StaticArrays", "TPSAInterface"]
-git-tree-sha1 = "91e4a7be50e4f2527528b286888e28ecd8d8ad73"
+git-tree-sha1 = "f665670dff0e5fde30dffc4c9dc0165fc2ac47ee"
 uuid = "05e19671-dec8-4f15-984f-54eaa6ca64be"
-version = "0.5.2"
+version = "0.5.3"
 weakdeps = ["GTPSA"]
 
     [deps.NonlinearNormalForm.extensions]
@@ -2905,9 +2905,11 @@ version = "0.6.1"
 
 [[deps.SciBmad]]
 deps = ["ADTypes", "AtomicAndPhysicalConstants", "BatchSolve", "BeamTracking", "Beamlines", "DataFrames", "DelimitedFiles", "DifferentiationInterface", "ForwardDiff", "FundamentalFrequencies", "GTPSA", "KernelAbstractions", "LinearAlgebra", "NonlinearNormalForm", "OrderedCollections", "PrecompileTools", "PrettyTables", "Reexport", "SparseArrays", "StaticArrays", "Statistics", "TPSAInterface"]
-git-tree-sha1 = "261149bbfecf9b09d034aa2153e35e4ae86f88fa"
+git-tree-sha1 = "41fe2382b9a95ba8717450eab31cbaa65dd04b3f"
+repo-rev = "main"
+repo-url = "https://github.com/bmad-sim/SciBmad.jl"
 uuid = "7bf6e793-a2ec-421f-8700-d1465381ee80"
-version = "0.5.2"
+version = "0.6.0"
 
 [[deps.SciMLBase]]
 deps = ["ADTypes", "Accessors", "Adapt", "ArrayInterface", "CommonSolve", "ConstructionBase", "Distributed", "DocStringExtensions", "EnumX", "FindFirstFunctions", "FunctionWrappersWrappers", "IteratorInterfaceExtensions", "LinearAlgebra", "Logging", "LoggingExtras", "Markdown", "PreallocationTools", "PrecompileTools", "Preferences", "Printf", "Random", "RecipesBase", "RecursiveArrayTools", "RuntimeGeneratedFunctions", "SciMLOperators", "SciMLPublic", "SciMLStructures", "StaticArraysCore", "Statistics", "SymbolicIndexingInterface"]
@@ -3339,9 +3341,9 @@ version = "1.0.3"
 
 [[deps.TPSAInterface]]
 deps = ["LinearAlgebra"]
-git-tree-sha1 = "ab6d1ce124c2fc79ce1619537e0369cc66b6c3cc"
+git-tree-sha1 = "4173b4d89479f024e4e5e712371cbf9bcaac2ee1"
 uuid = "575459ea-959c-4603-9b15-d63fb6693033"
-version = "0.3.0"
+version = "0.3.1"
 weakdeps = ["GTPSA"]
 
     [deps.TPSAInterface.extensions]

@@ -255,10 +255,21 @@ jobs:
       # under Rosetta, and neither tells us what the test is for -- that the package
       # works on the machine it is meant for. That one target is covered by the DMG
       # workflow's own build and by installing from the channel once published.
+      #
+      # On Windows the test environment goes on D:. rattler-build unpacks the package
+      # into TEMP, which is on C:, and C: on these runners has only ~26G free to start
+      # with. A build that cannot reuse the cached depot compiles ~14G onto C: (the
+      # depot lives in the user profile), and the unpacked payload then no longer fits:
+      # `Failed to copy test files: ... not enough space on the disk (os error 112)`.
+      # D: holds the workspace and has 200G+ free.
       - name: Test the built package
         if: '!(matrix.os == ''macos'' && matrix.arch == ''x86_64'')'
         shell: bash
         run: |
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            mkdir -p /d/tmp
+            export TEMP='D:\tmp' TMP='D:\tmp'
+          fi
           pkg=$(ls build/conda/pkg/${{ matrix.subdir }}/*.conda | head -1)
           echo "Testing $pkg"
           rattler-build test --package-file "$pkg"
@@ -316,7 +327,22 @@ jobs:
             echo "::error::ANACONDA_API_TOKEN secret is not set; cannot publish."
             exit 1
           fi
+          # Files already on the channel are skipped, so that a publish that failed
+          # partway (e.g. the channel hit its storage limit after four of five
+          # uploads) can be finished by republishing the same run's artifacts with
+          # `artifacts_from_run`. Without this the first already-uploaded file
+          # aborts the loop before the missing ones are reached. Matching is by
+          # `<subdir>/<filename>`, which includes the build hash, so a rebuilt
+          # package with the same version is not skipped -- it still fails below.
+          # A 404 means the package does not exist on the channel yet.
+          existing=$(curl -sf https://api.anaconda.org/package/bmad-sim/scibmad/files \
+            | jq -r '.[].basename' || true)
           find artifacts -name '*.conda' -print0 | while IFS= read -r -d '' pkg; do
+            key="$(basename "$(dirname "$pkg")")/$(basename "$pkg")"
+            if grep -qxF "$key" <<< "$existing"; then
+              echo "Skipping $key: already on the channel"
+              continue
+            fi
             echo "Uploading $pkg"
             # No --force. Overwriting a version already on the channel replaces a
             # package people may have installed, silently and with no record that
