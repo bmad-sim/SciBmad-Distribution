@@ -106,6 +106,193 @@ function dereference_symlinks!(root::String; max_passes::Int = 8)
     return total_replaced, total_removed
 end
 
+"""
+    cache_dependencies(payload) -> Set{String}
+
+Every source file recorded in the headers of the payload's precompile caches, as an
+absolute path inside `payload`. Julia checks these files when it loads a cache, and a
+missing one makes the cache stale, so the package would be recompiled on the user's
+machine. That would defeat the point of the distribution, so `remove_unless_cached!`
+never deletes anything in this set.
+
+The headers hold the paths the files had during staging. They may also be
+`@depot`-relative. Both forms are mapped to the payload by what follows `share/julia/`.
+"""
+function cache_dependencies(payload::String)
+    depot = joinpath(payload, "share", "julia")
+    deps = Set{String}()
+    for (dir, _, files) in walkdir(joinpath(depot, "compiled")), f in files
+        endswith(f, ".ji") || continue
+        p = joinpath(dir, f)
+        header = open(p) do io
+            Base.isvalid_cache_header(io) == 0 && return nothing
+            Base.parse_cache_header(io, p)
+        end
+        header === nothing && continue
+        for inc in header[2][1]
+            name = replace(inc.filename, '\\' => '/')
+            rel = if startswith(name, "@depot/")
+                name[length("@depot/")+1:end]
+            else
+                m = findlast("/share/julia/", name)
+                m === nothing ? nothing : name[last(m)+1:end]
+            end
+            rel === nothing || push!(deps, normpath(joinpath(depot, rel)))
+        end
+    end
+    return deps
+end
+
+# Longest path, relative to the payload root, that a Windows payload may contain.
+#
+# Windows refuses paths over 259 characters unless long paths are enabled in the
+# registry, which they are not by default (the GitHub runners do have them enabled,
+# so CI cannot catch this). conda first unpacks a package into its cache, so the
+# payload's paths come on top of
+#     C:\Users\<user>\<conda root>\pkgs\scibmad-0.6.0+26.10.14-h9490d1a_0\sb\
+# where `sb` is the directory `recipe/build.bat` installs the payload into. Apart from
+# the user name and conda root, that is 53 characters.
+#
+# Before pruning, Qt's headers and CMake files reached 199, and Qt's QML style images
+# (`qml/QtQuick/Controls/FluentWinUI3/...`) 173. After pruning, the longest path is a
+# DifferentiationInterface extension source, at 160. The precompile caches depend on
+# it, so it cannot be pruned. At 160, the install fits for a user name of up to 22
+# characters even with conda under `AppData\Local`, and Windows user names have at
+# most 20.
+#
+# The limit is a little above 160, so the current payload passes and a new long path
+# fails the build. At 165 the install still fits for a user name of up to 17
+# characters under `AppData\Local\miniforge3`, or 31 under `miniforge3`.
+const WINDOWS_MAX_RELPATH = 165
+
+# Directories at the top of a package's source tree that nothing loads at run time.
+# Removed from the Windows payload only, where their paths count against MAX_PATH.
+const DEV_ONLY_PACKAGE_DIRS = ("test", "docs", "benchmark", "benchmarks")
+
+# Directories of package sources that do not belong in the payload on any platform.
+#
+# NonlinearNormalForm's `fpp-ptc-sandbox/` holds FPP/PTC Fortran experiments, and the
+# released package commits their CMake build output with them: `CMakeCache.txt`,
+# `CMakeFiles/` and compiled `.o` files, about 600 files and 16 MB. None of it is
+# Julia, and nothing in the package loads it. Its paths also reach 188 characters,
+# more than a Windows install has room for. Staging builds none of this; it arrives
+# with the package source.
+const UNUSED_PACKAGE_DIRS = ("NonlinearNormalForm" => "fpp-ptc-sandbox",)
+
+# Directories at the top of an artifact that do not belong in the payload on any
+# platform.
+#
+# `qml/` holds Qt's QML modules: `qmldir` files, `.qml` sources, style images and QML
+# plugins. They are read only by a running QML engine, and nothing in the distribution
+# starts one. Qt reaches the payload only through GR, whose viewer `gksqt` is a
+# QtWidgets program; it links QtWidgets, QtNetwork, QtGui and QtCore and nothing else.
+# Qt6Declarative, which provides QML, comes in only as a dependency of Qt6Wayland_jll.
+# That package exists only on Linux and FreeBSD, and needs the Qt Quick libraries,
+# which are in `lib/` and are kept. Removing `qml/` saves about 1,600 files and 24 MB,
+# and removes the longest paths that remain on Windows (173 characters) once the
+# development files are gone.
+const UNUSED_ARTIFACT_DIRS = ("qml",)
+
+"""
+    remove_unless_cached!(candidates, deps) -> (removed_dirs, kept_dirs)
+
+Delete each existing directory in `candidates`, except any that holds a file in `deps`
+(see `cache_dependencies`). Deleting one of those would make Julia recompile the
+package that depends on it, so it is returned in `kept_dirs` instead.
+"""
+function remove_unless_cached!(candidates, deps::Set{String})
+    removed, kept = String[], String[]
+    for c in unique(candidates)
+        isdir(c) || continue
+        prefix = normpath(c) * Base.Filesystem.path_separator
+        if any(startswith(prefix), deps)
+            push!(kept, c)
+        else
+            rm(c; recursive = true, force = true)
+            push!(removed, c)
+        end
+    end
+    return removed, kept
+end
+
+package_dirs(depot) =
+    [pkg for stdlib in filter(isdir, readdir(joinpath(depot, "stdlib"); join = true))
+         for pkg in filter(isdir, readdir(stdlib; join = true))]
+
+"""
+    prune_unused!(payload) -> (removed_dirs, kept_dirs)
+
+Delete the directories named in `UNUSED_PACKAGE_DIRS` and `UNUSED_ARTIFACT_DIRS`. Runs
+on every platform.
+"""
+function prune_unused!(payload::String)
+    depot = joinpath(payload, "share", "julia")
+    candidates = [joinpath(pkg, d) for pkg in package_dirs(depot)
+                  for (name, d) in UNUSED_PACKAGE_DIRS if basename(pkg) == name]
+    artifacts = joinpath(depot, "artifacts")
+    if isdir(artifacts)
+        for a in readdir(artifacts; join = true), d in UNUSED_ARTIFACT_DIRS
+            push!(candidates, joinpath(a, d))
+        end
+    end
+    return remove_unless_cached!(candidates, cache_dependencies(payload))
+end
+
+"""
+    prune_for_windows!(payload) -> (removed_dirs, kept_dirs)
+
+Delete what a Windows payload does not need and whose paths are too long to install.
+The paths come from two places:
+
+- In artifacts (`share/julia/artifacts/*/`): C/C++ development files, that is
+  `include/`, `lib/cmake/`, and the CMake object-library directories (`objects-*`) that
+  Qt leaves in its module directories. Nothing compiles against the artifacts at run time; they are
+  loaded as shared libraries. Qt's private headers and CMake files are the longest
+  paths in the payload.
+- In package sources (`share/julia/stdlib/v1.12/*/`): the directories named in
+  `DEV_ONLY_PACKAGE_DIRS`.
+
+As in `remove_unless_cached!`, nothing a precompile cache depends on is deleted.
+"""
+function prune_for_windows!(payload::String)
+    depot = joinpath(payload, "share", "julia")
+    candidates = String[]
+
+    artifacts = joinpath(depot, "artifacts")
+    if isdir(artifacts)
+        for a in readdir(artifacts; join = true)
+            isdir(a) || continue
+            push!(candidates, joinpath(a, "include"), joinpath(a, "lib", "cmake"))
+            for (dir, dirs, _) in walkdir(a)
+                for d in dirs
+                    startswith(d, "objects-") && push!(candidates, joinpath(dir, d))
+                end
+            end
+        end
+    end
+
+    for pkg in package_dirs(depot), d in DEV_ONLY_PACKAGE_DIRS
+        push!(candidates, joinpath(pkg, d))
+    end
+
+    return remove_unless_cached!(candidates, cache_dependencies(payload))
+end
+
+"""
+    long_paths(root, limit) -> Vector{String}
+
+Every path under `root` whose length relative to `root` is over `limit`, longest first.
+"""
+function long_paths(root::String, limit::Int)
+    found = String[]
+    n = length(root) + 1
+    for (dir, dirs, files) in walkdir(root), name in Iterators.flatten((dirs, files))
+        rel = joinpath(dir, name)[n+1:end]
+        length(rel) > limit && push!(found, rel)
+    end
+    return sort!(found; by = length, rev = true)
+end
+
 platform_for(os, arch) =
     os == "macos"   ? MacOS(Symbol(arch)) :
     os == "linux"   ? Linux(Symbol(arch)) :
@@ -190,10 +377,29 @@ function main(args)
     install(product.startup_file, joinpath(payload, "etc/julia/startup.jl");
             parameters, force = true)
 
+    removed_dirs, kept_dirs = prune_unused!(payload)
+    @info "Removed unused directories" removed_dirs
+    isempty(kept_dirs) || @warn "Kept because a precompile cache depends on them" kept_dirs
+
     if os == "windows"
         @info "Dereferencing symlinks for Windows"
         replaced, removed = dereference_symlinks!(payload)
         @info "Symlinks resolved" replaced removed
+
+        # After dereferencing, which can copy a directory's contents in and so make
+        # new long paths.
+        @info "Pruning development files from the Windows payload"
+        pruned, kept = prune_for_windows!(payload)
+        @info "Pruned" directories=length(pruned)
+        isempty(kept) || @warn "Kept because a precompile cache depends on them" kept
+
+        too_long = long_paths(payload, WINDOWS_MAX_RELPATH)
+        if !isempty(too_long)
+            error("$(length(too_long)) payload paths are longer than " *
+                  "$WINDOWS_MAX_RELPATH characters and will not install on Windows " *
+                  "without long paths enabled. Longest:\n  " *
+                  join(first(too_long, 20), "\n  "))
+        end
     end
 
     @info "Staged payload" payload version os arch

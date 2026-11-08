@@ -58,6 +58,23 @@ using SciBmad                      # Brings SciBmad into scope
 This works on Linux (x86-64 and aarch64), macOS (Intel and Apple silicon), and Windows
 (x86-64). Mamba, micromamba and pixi work as well as conda.
 
+**On Windows**, the install can fail when a file's full path would be longer than
+Windows allows, which by default is 259 characters. conda then reports `InvalidArchiveError`
+with `No such file or directory`, or `CondaVerificationError` saying the package "appears
+to be corrupted". The distribution is built to fit with any user name and conda's usual
+install folders, but an older release, or conda installed in an unusually deep folder,
+can still hit the limit. To fix it, enable long paths, once per machine. In a PowerShell
+window opened with "Run as administrator":
+```powershell
+New-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem" -Name LongPathsEnabled -Value 1 -PropertyType DWORD -Force
+```
+Then delete the half-unpacked package, or conda will keep reporting it as corrupted. It
+is the folder named in the error, for example:
+```bat
+rmdir /s /q C:\Users\<user>\miniforge3\pkgs\scibmad-0.6.0+26.10.14-h9490d1a_0
+```
+Then open a new terminal and run the install again.
+
 ### Conda Maintenance 
 
 Useful Conda commands:
@@ -97,6 +114,8 @@ When using the Distribution executable, the result is something like:
 julia> Sys.BINDIR
 "/Users/dcs32/miniconda3/libexec/scibmad/bin"
 ```
+On Windows the Distribution is in a shorter folder, so the result is something like
+`C:\Users\dcs32\miniforge3\sb\bin`.
 
 Packages the user installs with `Pkg` go in a per-user directory outside the conda
 environment (`~/.local/share/scibmad`, or `%LOCALAPPDATA%\scibmad` on Windows), so they
@@ -285,6 +304,39 @@ Some things about this are not obvious from the files:
   relative symlinks from Julia package sources, and they cannot survive the copy into the
   prefix there. They also need a privilege to create that a user installing the package
   may not have.
+
+- Windows paths are kept short in two ways. Without long paths enabled, Windows refuses
+  any path over 259 characters. conda unpacks the package into
+  `C:\Users\<user>\<conda root>\pkgs\scibmad-<version>-<hash>_0\` before linking it into
+  the environment, and that uses about 60 to 80 of them before the payload starts.
+
+  First, `build.bat` installs the payload into `%PREFIX%\sb` rather than the
+  `libexec\scibmad` used on macOS and Linux, which saves 13 characters.
+
+  Second, the Windows payload is pruned (`prune_for_windows!` in `stage.jl`). Unpruned,
+  Qt's private headers reached 199 characters inside the payload. Two kinds of file are
+  removed:
+  - in artifacts: `include/`, `lib/cmake/` and Qt's `objects-*` directories
+  - in package sources: `test/`, `docs/` and `benchmark(s)/`
+
+  Two directories are removed from every platform's payload, not only Windows
+  (`prune_unused!`):
+  - NonlinearNormalForm's `fpp-ptc-sandbox/`. It holds Fortran experiments, along with
+    CMake build output that the released package commits: about 600 files and 16 MB,
+    none of which the package loads.
+  - Qt's `qml/` modules in the Qt6Declarative artifact, about 1,600 files and 24 MB.
+    They are read only by a QML engine, and nothing in the distribution starts one. GR's
+    Qt viewer `gksqt` is a QtWidgets program.
+
+  Nothing a precompile cache header lists is deleted, because a missing source file
+  would make Julia recompile that package. Staging then fails if any path is still
+  longer than `WINDOWS_MAX_RELPATH` (165). The GitHub runners have long paths enabled
+  and short workspace paths, so without this check CI would never see the problem.
+  After pruning, the longest path is a DifferentiationInterface extension source, at
+  160 characters. The precompile caches depend on it, so it stays. With that and `sb`,
+  the install fits for any user name of up to 22 characters, even with conda under
+  `AppData\Local`; Windows user names have at most 20. Only a conda root deeper than
+  usual should need long paths enabled.
 
 - Every matrix entry names its conda subdir explicitly. rattler-build otherwise infers it
   from the machine it is running on, which is wrong for the macOS targets because both are

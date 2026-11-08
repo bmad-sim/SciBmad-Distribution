@@ -2,10 +2,20 @@
 setlocal enableextensions
 
 rem Install the staged payload into the prefix, plus a launcher on PATH.
-rem See build.sh for why the payload lives under libexec rather than being merged
-rem into the prefix, and why USER_DATA is set outside the prefix.
+rem See build.sh for why the payload lives in a directory of its own rather than being
+rem merged into the prefix, and why USER_DATA is set outside the prefix.
+rem
+rem That directory is `sb` here rather than the `libexec\scibmad` used on macOS and
+rem Linux, because every character counts against Windows' 259-character path limit.
+rem conda unpacks the package into
+rem `C:\Users\<user>\<conda root>\pkgs\scibmad-<version>-<hash>_0\` before linking it
+rem into the environment, so this directory name and the payload's own paths come on
+rem top of that. The longest payload path is 160 characters (see WINDOWS_MAX_RELPATH
+rem in meta/conda/stage.jl). With `sb` the install fits for a user name of up to 22
+rem characters, even with conda under `AppData\Local`; Windows user names have at most
+rem 20. With `libexec\scibmad` the limit would be 9.
 
-set "PAYLOAD_DEST=%PREFIX%\libexec\scibmad"
+set "PAYLOAD_DEST=%PREFIX%\sb"
 
 rem rattler-build hands the script an extended-length source path, of the form
 rem `\\?\D:\...`. That prefix switches off path normalisation, which means `..`
@@ -51,7 +61,7 @@ rem parentheses and redirects inside the batch body need escaping as ^( ^) ^> .
 >>"%PREFIX%\bin\scibmad.bat" echo set "SCIBMAD_PREFIX=%%~dp0.."
 >>"%PREFIX%\bin\scibmad.bat" echo if "%%USER_DATA%%"=="" set "USER_DATA=%%LOCALAPPDATA%%\scibmad"
 >>"%PREFIX%\bin\scibmad.bat" echo if not exist "%%USER_DATA%%" mkdir "%%USER_DATA%%"
->>"%PREFIX%\bin\scibmad.bat" echo "%%SCIBMAD_PREFIX%%\libexec\scibmad\bin\julia.exe" %%*
+>>"%PREFIX%\bin\scibmad.bat" echo "%%SCIBMAD_PREFIX%%\sb\bin\julia.exe" %%*
 
 rem Exit explicitly. robocopy signals success with a non-zero code -- 1 means "files
 rem were copied", which is the normal outcome here -- and rattler-build checks the
