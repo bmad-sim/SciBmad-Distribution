@@ -166,8 +166,20 @@ end
 const WINDOWS_MAX_RELPATH = 165
 
 # Directories at the top of a package's source tree that nothing loads at run time.
-# Removed from the Windows payload only, where their paths count against MAX_PATH.
 const DEV_ONLY_PACKAGE_DIRS = ("test", "docs", "benchmark", "benchmarks")
+
+# Directories inside an artifact that hold files for building against it or for reading
+# about it, not files it loads: C/C++ headers, CMake and pkg-config files, and
+# documentation. Artifacts are only ever loaded as shared libraries or run as programs.
+const DEV_ONLY_ARTIFACT_DIRS = (
+    "include",
+    joinpath("lib", "cmake"),
+    joinpath("lib", "pkgconfig"),
+    joinpath("share", "doc"),
+    joinpath("share", "man"),
+    joinpath("share", "info"),
+    joinpath("share", "gtk-doc"),
+)
 
 # Directories of package sources that do not belong in the payload on any platform.
 #
@@ -194,18 +206,23 @@ const UNUSED_PACKAGE_DIRS = ("NonlinearNormalForm" => "fpp-ptc-sandbox",)
 const UNUSED_ARTIFACT_DIRS = ("qml",)
 
 """
-    remove_unless_cached!(candidates, deps) -> (removed_dirs, kept_dirs)
+    remove_unless_cached!(candidates, deps) -> (removed, kept)
 
-Delete each existing directory in `candidates`, except any that holds a file in `deps`
-(see `cache_dependencies`). Deleting one of those would make Julia recompile the
-package that depends on it, so it is returned in `kept_dirs` instead.
+Delete each existing file or directory in `candidates`, except a file in `deps` (see
+`cache_dependencies`) or a directory that holds one. Deleting one of those would make
+Julia recompile the package that depends on it, so it is returned in `kept` instead.
 """
 function remove_unless_cached!(candidates, deps::Set{String})
     removed, kept = String[], String[]
     for c in unique(candidates)
-        isdir(c) || continue
-        prefix = normpath(c) * Base.Filesystem.path_separator
-        if any(startswith(prefix), deps)
+        ispath(c) || continue
+        needed = if isdir(c)
+            prefix = normpath(c) * Base.Filesystem.path_separator
+            any(startswith(prefix), deps)
+        else
+            normpath(c) in deps
+        end
+        if needed
             push!(kept, c)
         else
             rm(c; recursive = true, force = true)
@@ -239,22 +256,66 @@ function prune_unused!(payload::String)
 end
 
 """
-    prune_for_windows!(payload) -> (removed_dirs, kept_dirs)
+    checkbounds_cache_files(depot) -> Vector{String}
 
-Delete what a Windows payload does not need and whose paths are too long to install.
-The paths come from two places:
+The files of every precompile cache built for `--check-bounds=yes` whose package also
+has a cache built without it.
 
-- In artifacts (`share/julia/artifacts/*/`): C/C++ development files, that is
-  `include/`, `lib/cmake/`, and the CMake object-library directories (`objects-*`) that
-  Qt leaves in its module directories. Nothing compiles against the artifacts at run time; they are
-  loaded as shared libraries. Qt's private headers and CMake files are the longest
-  paths in the payload.
+Julia's binary distribution ships its stdlibs precompiled twice, with and without
+`--check-bounds=yes`, about 54 packages and 160 MB (28 MB compressed). A session uses
+only the variant whose bounds-checking mode matches its own. Only `--check-bounds=yes`
+picks the first, and that is mostly `Pkg.test`. After pruning, such a session compiles
+those stdlibs into the user depot once.
+
+A cache is a `.ji` file plus, with package images, a shared library and on macOS its
+`.dSYM`, all named `<stem>.<ext>`. All of them are returned.
+"""
+function checkbounds_cache_files(depot::String)
+    found = String[]
+    compiled = joinpath(depot, "compiled")
+    isdir(compiled) || return found
+    for (dir, _, files) in walkdir(compiled)
+        jis = filter(endswith(".ji"), files)
+        length(jis) > 1 || continue
+        flags = Dict(f => open(joinpath(dir, f)) do io
+                         Base.isvalid_cache_header(io) == 0 && return nothing
+                         Base.CacheFlags(read(io, UInt8))
+                     end for f in jis)
+        any(fl -> fl !== nothing && fl.check_bounds == 0, values(flags)) || continue
+        for (f, fl) in flags
+            (fl !== nothing && fl.check_bounds == 1) || continue
+            stem = f[1:end-length(".ji")]
+            for g in readdir(dir)
+                (g == f || startswith(g, stem * ".")) && push!(found, joinpath(dir, g))
+            end
+        end
+    end
+    return found
+end
+
+"""
+    prune_dev_files!(payload) -> (removed, kept)
+
+Delete what the payload carries but nothing uses at run time. Runs on every platform.
+On Windows it runs after symlinks are dereferenced, which can copy new files in.
+
+- In artifacts (`share/julia/artifacts/*/`): the directories in `DEV_ONLY_ARTIFACT_DIRS`,
+  the CMake object-library directories (`objects-*`) that Qt leaves in its module
+  directories, and static libraries (`*.a`, which includes Windows import libraries
+  `*.dll.a`). Qt's private headers and CMake files are also the longest paths in the
+  payload, which matters on Windows.
 - In package sources (`share/julia/stdlib/v1.13/*/`): the directories named in
   `DEV_ONLY_PACKAGE_DIRS`.
+- `share/julia/clones/`: Pkg's git clones of the packages tracked by URL (SciBmad).
+  Pkg reads them only to add or update those packages, which is never done to the
+  bundled environment. About 75 MB, already compressed, so it is the same in the package.
+- `*.dSYM` bundles (macOS): debug symbols for Julia's libraries and for every package
+  image, read only by a debugger. About 525 MB, 75 MB compressed.
+- Precompile caches for `--check-bounds=yes` (`checkbounds_cache_files`).
 
 As in `remove_unless_cached!`, nothing a precompile cache depends on is deleted.
 """
-function prune_for_windows!(payload::String)
+function prune_dev_files!(payload::String)
     depot = joinpath(payload, "share", "julia")
     candidates = String[]
 
@@ -262,12 +323,21 @@ function prune_for_windows!(payload::String)
     if isdir(artifacts)
         for a in readdir(artifacts; join = true)
             isdir(a) || continue
-            push!(candidates, joinpath(a, "include"), joinpath(a, "lib", "cmake"))
-            for (dir, dirs, _) in walkdir(a)
+            append!(candidates, joinpath(a, d) for d in DEV_ONLY_ARTIFACT_DIRS)
+            for (dir, dirs, files) in walkdir(a)
                 for d in dirs
                     startswith(d, "objects-") && push!(candidates, joinpath(dir, d))
                 end
+                for f in files
+                    endswith(f, ".a") && push!(candidates, joinpath(dir, f))
+                end
             end
+        end
+    end
+    libdir = joinpath(payload, "lib")
+    if isdir(libdir)
+        for (dir, _, files) in walkdir(libdir), f in files
+            endswith(f, ".a") && push!(candidates, joinpath(dir, f))
         end
     end
 
@@ -275,6 +345,19 @@ function prune_for_windows!(payload::String)
         push!(candidates, joinpath(pkg, d))
     end
 
+    push!(candidates, joinpath(depot, "clones"))
+
+    for (dir, dirs, _) in walkdir(payload)
+        for d in dirs
+            endswith(d, ".dSYM") && push!(candidates, joinpath(dir, d))
+        end
+    end
+
+    append!(candidates, checkbounds_cache_files(depot))
+
+    # A `.dSYM` can be found both on its own and as part of a check-bounds cache, and a
+    # directory can be removed before a candidate inside it; `remove_unless_cached!`
+    # skips paths that no longer exist.
     return remove_unless_cached!(candidates, cache_dependencies(payload))
 end
 
@@ -385,14 +468,16 @@ function main(args)
         @info "Dereferencing symlinks for Windows"
         replaced, removed = dereference_symlinks!(payload)
         @info "Symlinks resolved" replaced removed
+    end
 
-        # After dereferencing, which can copy a directory's contents in and so make
-        # new long paths.
-        @info "Pruning development files from the Windows payload"
-        pruned, kept = prune_for_windows!(payload)
-        @info "Pruned" directories=length(pruned)
-        isempty(kept) || @warn "Kept because a precompile cache depends on them" kept
+    # On Windows after dereferencing, which can copy a directory's contents in and so
+    # make new long paths.
+    @info "Pruning development files from the payload"
+    pruned, kept = prune_dev_files!(payload)
+    @info "Pruned" paths=length(pruned)
+    isempty(kept) || @warn "Kept because a precompile cache depends on them" kept
 
+    if os == "windows"
         too_long = long_paths(payload, WINDOWS_MAX_RELPATH)
         if !isempty(too_long)
             error("$(length(too_long)) payload paths are longer than " *

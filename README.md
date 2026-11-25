@@ -313,14 +313,21 @@ Some things about this are not obvious from the files:
   First, `build.bat` installs the payload into `%PREFIX%\sb` rather than the
   `libexec\scibmad` used on macOS and Linux, which saves 13 characters.
 
-  Second, the Windows payload is pruned (`prune_for_windows!` in `stage.jl`). Unpruned,
-  Qt's private headers reached 199 characters inside the payload. Two kinds of file are
-  removed:
-  - in artifacts: `include/`, `lib/cmake/` and Qt's `objects-*` directories
-  - in package sources: `test/`, `docs/` and `benchmark(s)/`
+  Second, the payload is pruned (see the next item). Unpruned, Qt's private headers
+  reached 199 characters inside the payload.
 
-  Two directories are removed from every platform's payload, not only Windows
-  (`prune_unused!`):
+  Staging fails if any path is still longer than `WINDOWS_MAX_RELPATH` (165). The GitHub
+  runners have long paths enabled and short workspace paths, so without this check CI
+  would never see the problem.
+  After pruning, the longest path is a DifferentiationInterface extension source, at
+  160 characters. The precompile caches depend on it, so it stays. With that and `sb`,
+  the install fits for any user name of up to 22 characters, even with conda under
+  `AppData\Local`; Windows user names have at most 20. Only a conda root deeper than
+  usual should need long paths enabled.
+
+- On every platform, files that nothing uses at run time are pruned from the payload.
+  Applied to the macOS arm64 0.6.0 package, this takes the payload from 3.9 GB to 2.9 GB
+  and, by estimate, the package from 944 MB to about 635 MB. `prune_unused!` in `stage.jl` removes:
   - NonlinearNormalForm's `fpp-ptc-sandbox/`. It holds Fortran experiments, along with
     CMake build output that the released package commits: about 600 files and 16 MB,
     none of which the package loads.
@@ -328,15 +335,22 @@ Some things about this are not obvious from the files:
     They are read only by a QML engine, and nothing in the distribution starts one. GR's
     Qt viewer `gksqt` is a QtWidgets program.
 
+  `prune_dev_files!` removes (compressed sizes from the macOS arm64 0.6.0 package):
+  - `*.dSYM` debug symbols, macOS only: 525 MB, 75 MB compressed.
+  - `share/julia/clones/`, Pkg's git clone of SciBmad, which it reads only to add or
+    update SciBmad in the bundled environment: 76 MB, already compressed.
+  - Package `test/`, `docs/` and `benchmark(s)/` directories: 247 MB, 100 MB compressed.
+  - In artifacts: `include/`, `lib/cmake/`, `lib/pkgconfig/`, `share/{doc,man,info,gtk-doc}/`,
+    Qt's `objects-*` directories, and static libraries (`*.a`, also in `lib/`): 130 MB,
+    28 MB compressed.
+  - Julia's stdlib caches built for `--check-bounds=yes`, when a cache built without it
+    exists too: 54 packages, 160 MB, 28 MB compressed. Only a `--check-bounds=yes`
+    session (mostly `Pkg.test`) uses them; it now compiles those stdlibs once into the
+    user depot.
+
   Nothing a precompile cache header lists is deleted, because a missing source file
-  would make Julia recompile that package. Staging then fails if any path is still
-  longer than `WINDOWS_MAX_RELPATH` (165). The GitHub runners have long paths enabled
-  and short workspace paths, so without this check CI would never see the problem.
-  After pruning, the longest path is a DifferentiationInterface extension source, at
-  160 characters. The precompile caches depend on it, so it stays. With that and `sb`,
-  the install fits for any user name of up to 22 characters, even with conda under
-  `AppData\Local`; Windows user names have at most 20. Only a conda root deeper than
-  usual should need long paths enabled.
+  would make Julia recompile that package. On Windows, pruning runs after symlinks are
+  dereferenced, since that can copy in new files.
 
 - Every matrix entry names its conda subdir explicitly. rattler-build otherwise infers it
   from the machine it is running on, which is wrong for the macOS targets because both are
