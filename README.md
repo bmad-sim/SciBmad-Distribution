@@ -356,7 +356,7 @@ Some things about this are not obvious from the files:
 ## Patches
 
 Files under `meta/patches/<Package>/…` are copied over the corresponding files of the bundled
-packages during the build. Five patches are currently applied:
+packages during the build. Six patches are currently applied:
 
 - `meta/patches/GLMakie/src/precompiles.jl` — GLMakie's `@setup_workload` block opens an
   OpenGL screen, which is not available while packages are precompiled into the bundle. The
@@ -374,6 +374,15 @@ packages during the build. Five patches are currently applied:
   generated from PythonCall v0.9.35 and must be regenerated when PythonCall is upgraded: copy
   `src/Core/juliacall.jl` from the new version and replace the two uses of `ROOT_DIR` inside
   `init_juliacall` with the load-path lookup.
+
+- `meta/patches/PythonCall/src/Core/stdlib.jl` — the same `ROOT_DIR` problem, when Julia is
+  started from Python (juliacall, which the Python package `scibmad` uses to run the
+  distribution): `init_stdlib` then runs `pysrc/juliacall/init.jl` at the baked path, and
+  starting fails with `SystemError: opening file ".../init.jl"`. The patched copy locates
+  PythonCall through the load path, as the `juliacall.jl` patch does. It was generated from
+  PythonCall v0.9.35 and must be regenerated when PythonCall is upgraded: copy
+  `src/Core/stdlib.jl` from the new version and replace the use of `ROOT_DIR` in
+  `init_stdlib` with the load-path lookup.
 
 - `meta/patches/PythonCall/src/C/C.jl` — PythonCall asks CondaPkg to download and resolve a
   Python environment when it is first loaded. The bundle ships its own interpreter in
@@ -403,9 +412,16 @@ packages during the build. Five patches are currently applied:
   runs the script from where PythonCall actually is and passes the answer in
   `JULIA_PYTHONCALL_LIB`.
 
+  When Julia is started from Python (juliacall sets `__JULIA_PYTHONCALL_EMBEDDED_LIBPTR__`,
+  which PythonCall itself uses to detect this), PythonCall uses the Python it runs in, and
+  `__init__` skips both functions: otherwise the bundled `libpython3.11` was loaded into the
+  Python process as a second Python library (macOS, Python 3.12: no failure seen, but two
+  libpythons in one process are not safe, e.g. with Linux's flat symbol namespace).
+
   It was generated from PythonCall v0.9.35 and must be regenerated when PythonCall is
   upgraded: copy `src/C/C.jl` from the new version and re-apply the block after the
-  `include`s along with the two calls in `__init__`.
+  `include`s along with the two calls in `__init__`, inside their check for
+  `__JULIA_PYTHONCALL_EMBEDDED_LIBPTR__`.
 
 - `meta/patches/IJulia/deps/deps.jl` — IJulia refuses to load unless `deps/deps.jl` exists:
   `src/IJulia.jl` aborts with `IJulia not properly installed. Please run Pkg.build("IJulia")`.

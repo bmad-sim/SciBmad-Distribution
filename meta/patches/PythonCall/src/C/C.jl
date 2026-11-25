@@ -131,15 +131,20 @@ function use_condapkg_libpython!()
 end
 
 function __init__()
-    try
-        use_bundled_python!()
-    catch err
-        @warn "Could not point PythonCall at the bundled Python interpreter." err
-    end
-    try
-        use_condapkg_libpython!()
-    catch err
-        @warn "Could not locate a Python library for PythonCall to load." err
+    # Started from Python (juliacall: `__JULIA_PYTHONCALL_EMBEDDED_LIBPTR__` is set by
+    # juliacall), PythonCall uses the Python it is embedded in. The bundled interpreter must
+    # not be loaded into that process then (a second libpython), and there is nothing to find.
+    if !haskey(ENV, "__JULIA_PYTHONCALL_EMBEDDED_LIBPTR__")
+        try
+            use_bundled_python!()
+        catch err
+            @warn "Could not point PythonCall at the bundled Python interpreter." err
+        end
+        try
+            use_condapkg_libpython!()
+        catch err
+            @warn "Could not locate a Python library for PythonCall to load." err
+        end
     end
     init_context()
 end
