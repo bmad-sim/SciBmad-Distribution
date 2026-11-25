@@ -43,7 +43,7 @@ easier one and is recommended. The app installer route is documented at the
 very end of this README file.
 
 Note that the distribution ships its own Julia, so Julia does not need to be installed
-separately. The bundled Julia is version 1.12.
+separately. The bundled Julia is version 1.13.
 
 ### Conda Install (recommended)
 
@@ -107,7 +107,7 @@ It is important not to confuse the two. When you are in Julia, you can see which
 using the command `Sys.BINDIR`. The result when running standard Julia is something like:
 ```julia
 julia> Sys.BINDIR
-"/Users/dcs32/.julia/juliaup/julia-1.12.7+0.aarch64.apple.darwin14/Julia-1.12.app/Contents/Resources/julia/bin"
+"/Users/dcs32/.julia/juliaup/julia-1.13.3+0.aarch64.apple.darwin14/Julia-1.13.app/Contents/Resources/julia/bin"
 ```
 When using the Distribution executable, the result is something like:
 ```julia
@@ -361,9 +361,10 @@ packages during the build. Six patches are currently applied:
 - `meta/patches/GLMakie/src/precompiles.jl` — GLMakie's `@setup_workload` block opens an
   OpenGL screen, which is not available while packages are precompiled into the bundle. The
   patched copy comments that block out and keeps the static `precompile()` statements. It was
-  generated from GLMakie v0.13.13 and must be regenerated when GLMakie is upgraded: copy
-  `src/precompiles.jl` from the new version and comment out the `macro compile` definition
-  and the `let @setup_workload … end` block.
+  generated from GLMakie v0.13.17 and must be regenerated when GLMakie is upgraded: copy
+  `src/precompiles.jl` from the new version and comment out the `macro compile` definition,
+  the `is_context_unavailable` and `precompile_screen` helpers, and the
+  `let @setup_workload … end` block.
 
 - `meta/patches/PythonCall/src/Core/juliacall.jl` — PythonCall locates its bundled `juliacall`
   Python package through `ROOT_DIR`, which is `dirname(dirname(@__DIR__))` and is therefore
@@ -371,7 +372,7 @@ packages during the build. Six patches are currently applied:
   installed somewhere else, so the recorded path no longer exists and `using PythonCall` fails
   with `ModuleNotFoundError: No module named 'juliacall'`. The patched copy locates the package
   through the load path instead, which follows the bundle wherever it is installed. It was
-  generated from PythonCall v0.9.35 and must be regenerated when PythonCall is upgraded: copy
+  generated from PythonCall v0.9.37 and must be regenerated when PythonCall is upgraded: copy
   `src/Core/juliacall.jl` from the new version and replace the two uses of `ROOT_DIR` inside
   `init_juliacall` with the load-path lookup.
 
@@ -380,7 +381,7 @@ packages during the build. Six patches are currently applied:
   distribution): `init_stdlib` then runs `pysrc/juliacall/init.jl` at the baked path, and
   starting fails with `SystemError: opening file ".../init.jl"`. The patched copy locates
   PythonCall through the load path, as the `juliacall.jl` patch does. It was generated from
-  PythonCall v0.9.35 and must be regenerated when PythonCall is upgraded: copy
+  PythonCall v0.9.37 and must be regenerated when PythonCall is upgraded: copy
   `src/Core/stdlib.jl` from the new version and replace the use of `ROOT_DIR` in
   `init_stdlib` with the load-path lookup.
 
@@ -403,7 +404,8 @@ packages during the build. Six patches are currently applied:
   to address zero. `python3 -V` survives because it returns before reaching that code;
   anything else dies with `SIGSEGV`. The aarch64 build targets macOS 11, where `getentropy`
   needs no guard, which is why only this one platform is affected. This is an upstream bug in
-  `Python_jll 3.11.12+0`, and the skip can be dropped once a fixed build exists.
+  `Python_jll 3.11.12+0` (not rechecked with the 3.12.15+1 now bundled), and the skip can be
+  dropped once a fixed build exists.
 
   On those two platforms the same patch also has to find libpython. PythonCall locates it by
   running `src/C/find_libpython.py`, at a path `@__DIR__` baked in at precompile time — inside
@@ -414,11 +416,11 @@ packages during the build. Six patches are currently applied:
 
   When Julia is started from Python (juliacall sets `__JULIA_PYTHONCALL_EMBEDDED_LIBPTR__`,
   which PythonCall itself uses to detect this), PythonCall uses the Python it runs in, and
-  `__init__` skips both functions: otherwise the bundled `libpython3.11` was loaded into the
+  `__init__` skips both functions: otherwise the bundled `libpython3.12` was loaded into the
   Python process as a second Python library (macOS, Python 3.12: no failure seen, but two
   libpythons in one process are not safe, e.g. with Linux's flat symbol namespace).
 
-  It was generated from PythonCall v0.9.35 and must be regenerated when PythonCall is
+  It was generated from PythonCall v0.9.37 and must be regenerated when PythonCall is
   upgraded: copy `src/C/C.jl` from the new version and re-apply the block after the
   `include`s along with the two calls in `__init__`, inside their check for
   `__JULIA_PYTHONCALL_EMBEDDED_LIBPTR__`.

@@ -249,7 +249,7 @@ The paths come from two places:
   Qt leaves in its module directories. Nothing compiles against the artifacts at run time; they are
   loaded as shared libraries. Qt's private headers and CMake files are the longest
   paths in the payload.
-- In package sources (`share/julia/stdlib/v1.12/*/`): the directories named in
+- In package sources (`share/julia/stdlib/v1.13/*/`): the directories named in
   `DEV_ONLY_PACKAGE_DIRS`.
 
 As in `remove_unless_cached!`, nothing a precompile cache depends on is deleted.
