@@ -43,7 +43,7 @@ easier one and is recommended. The app installer route is documented at the
 very end of this README file.
 
 Note that the distribution ships its own Julia, so Julia does not need to be installed
-separately. The bundled Julia is version 1.12.
+separately. The bundled Julia is version 1.13.
 
 ### Conda Install (recommended)
 
@@ -107,7 +107,7 @@ It is important not to confuse the two. When you are in Julia, you can see which
 using the command `Sys.BINDIR`. The result when running standard Julia is something like:
 ```julia
 julia> Sys.BINDIR
-"/Users/dcs32/.julia/juliaup/julia-1.12.7+0.aarch64.apple.darwin14/Julia-1.12.app/Contents/Resources/julia/bin"
+"/Users/dcs32/.julia/juliaup/julia-1.13.3+0.aarch64.apple.darwin14/Julia-1.13.app/Contents/Resources/julia/bin"
 ```
 When using the Distribution executable, the result is something like:
 ```julia
@@ -313,14 +313,21 @@ Some things about this are not obvious from the files:
   First, `build.bat` installs the payload into `%PREFIX%\sb` rather than the
   `libexec\scibmad` used on macOS and Linux, which saves 13 characters.
 
-  Second, the Windows payload is pruned (`prune_for_windows!` in `stage.jl`). Unpruned,
-  Qt's private headers reached 199 characters inside the payload. Two kinds of file are
-  removed:
-  - in artifacts: `include/`, `lib/cmake/` and Qt's `objects-*` directories
-  - in package sources: `test/`, `docs/` and `benchmark(s)/`
+  Second, the payload is pruned (see the next item). Unpruned, Qt's private headers
+  reached 199 characters inside the payload.
 
-  Two directories are removed from every platform's payload, not only Windows
-  (`prune_unused!`):
+  Staging fails if any path is still longer than `WINDOWS_MAX_RELPATH` (165). The GitHub
+  runners have long paths enabled and short workspace paths, so without this check CI
+  would never see the problem.
+  After pruning, the longest path is a DifferentiationInterface extension source, at
+  160 characters. The precompile caches depend on it, so it stays. With that and `sb`,
+  the install fits for any user name of up to 22 characters, even with conda under
+  `AppData\Local`; Windows user names have at most 20. Only a conda root deeper than
+  usual should need long paths enabled.
+
+- On every platform, files that nothing uses at run time are pruned from the payload.
+  Applied to the macOS arm64 0.6.0 package, this takes the payload from 3.9 GB to 2.9 GB
+  and, by estimate, the package from 944 MB to about 635 MB. `prune_unused!` in `stage.jl` removes:
   - NonlinearNormalForm's `fpp-ptc-sandbox/`. It holds Fortran experiments, along with
     CMake build output that the released package commits: about 600 files and 16 MB,
     none of which the package loads.
@@ -328,15 +335,22 @@ Some things about this are not obvious from the files:
     They are read only by a QML engine, and nothing in the distribution starts one. GR's
     Qt viewer `gksqt` is a QtWidgets program.
 
+  `prune_dev_files!` removes (compressed sizes from the macOS arm64 0.6.0 package):
+  - `*.dSYM` debug symbols, macOS only: 525 MB, 75 MB compressed.
+  - `share/julia/clones/`, Pkg's git clone of SciBmad, which it reads only to add or
+    update SciBmad in the bundled environment: 76 MB, already compressed.
+  - Package `test/`, `docs/` and `benchmark(s)/` directories: 247 MB, 100 MB compressed.
+  - In artifacts: `include/`, `lib/cmake/`, `lib/pkgconfig/`, `share/{doc,man,info,gtk-doc}/`,
+    Qt's `objects-*` directories, and static libraries (`*.a`, also in `lib/`): 130 MB,
+    28 MB compressed.
+  - Julia's stdlib caches built for `--check-bounds=yes`, when a cache built without it
+    exists too: 54 packages, 160 MB, 28 MB compressed. Only a `--check-bounds=yes`
+    session (mostly `Pkg.test`) uses them; it now compiles those stdlibs once into the
+    user depot.
+
   Nothing a precompile cache header lists is deleted, because a missing source file
-  would make Julia recompile that package. Staging then fails if any path is still
-  longer than `WINDOWS_MAX_RELPATH` (165). The GitHub runners have long paths enabled
-  and short workspace paths, so without this check CI would never see the problem.
-  After pruning, the longest path is a DifferentiationInterface extension source, at
-  160 characters. The precompile caches depend on it, so it stays. With that and `sb`,
-  the install fits for any user name of up to 22 characters, even with conda under
-  `AppData\Local`; Windows user names have at most 20. Only a conda root deeper than
-  usual should need long paths enabled.
+  would make Julia recompile that package. On Windows, pruning runs after symlinks are
+  dereferenced, since that can copy in new files.
 
 - Every matrix entry names its conda subdir explicitly. rattler-build otherwise infers it
   from the machine it is running on, which is wrong for the macOS targets because both are
@@ -356,14 +370,15 @@ Some things about this are not obvious from the files:
 ## Patches
 
 Files under `meta/patches/<Package>/…` are copied over the corresponding files of the bundled
-packages during the build. Five patches are currently applied:
+packages during the build. Six patches are currently applied:
 
 - `meta/patches/GLMakie/src/precompiles.jl` — GLMakie's `@setup_workload` block opens an
   OpenGL screen, which is not available while packages are precompiled into the bundle. The
   patched copy comments that block out and keeps the static `precompile()` statements. It was
-  generated from GLMakie v0.13.13 and must be regenerated when GLMakie is upgraded: copy
-  `src/precompiles.jl` from the new version and comment out the `macro compile` definition
-  and the `let @setup_workload … end` block.
+  generated from GLMakie v0.13.17 and must be regenerated when GLMakie is upgraded: copy
+  `src/precompiles.jl` from the new version and comment out the `macro compile` definition,
+  the `is_context_unavailable` and `precompile_screen` helpers, and the
+  `let @setup_workload … end` block.
 
 - `meta/patches/PythonCall/src/Core/juliacall.jl` — PythonCall locates its bundled `juliacall`
   Python package through `ROOT_DIR`, which is `dirname(dirname(@__DIR__))` and is therefore
@@ -371,9 +386,18 @@ packages during the build. Five patches are currently applied:
   installed somewhere else, so the recorded path no longer exists and `using PythonCall` fails
   with `ModuleNotFoundError: No module named 'juliacall'`. The patched copy locates the package
   through the load path instead, which follows the bundle wherever it is installed. It was
-  generated from PythonCall v0.9.35 and must be regenerated when PythonCall is upgraded: copy
+  generated from PythonCall v0.9.37 and must be regenerated when PythonCall is upgraded: copy
   `src/Core/juliacall.jl` from the new version and replace the two uses of `ROOT_DIR` inside
   `init_juliacall` with the load-path lookup.
+
+- `meta/patches/PythonCall/src/Core/stdlib.jl` — the same `ROOT_DIR` problem, when Julia is
+  started from Python (juliacall, which the Python package `scibmad` uses to run the
+  distribution): `init_stdlib` then runs `pysrc/juliacall/init.jl` at the baked path, and
+  starting fails with `SystemError: opening file ".../init.jl"`. The patched copy locates
+  PythonCall through the load path, as the `juliacall.jl` patch does. It was generated from
+  PythonCall v0.9.37 and must be regenerated when PythonCall is upgraded: copy
+  `src/Core/stdlib.jl` from the new version and replace the use of `ROOT_DIR` in
+  `init_stdlib` with the load-path lookup.
 
 - `meta/patches/PythonCall/src/C/C.jl` — PythonCall asks CondaPkg to download and resolve a
   Python environment when it is first loaded. The bundle ships its own interpreter in
@@ -394,7 +418,8 @@ packages during the build. Five patches are currently applied:
   to address zero. `python3 -V` survives because it returns before reaching that code;
   anything else dies with `SIGSEGV`. The aarch64 build targets macOS 11, where `getentropy`
   needs no guard, which is why only this one platform is affected. This is an upstream bug in
-  `Python_jll 3.11.12+0`, and the skip can be dropped once a fixed build exists.
+  `Python_jll 3.11.12+0` (not rechecked with the 3.12.15+1 now bundled), and the skip can be
+  dropped once a fixed build exists.
 
   On those two platforms the same patch also has to find libpython. PythonCall locates it by
   running `src/C/find_libpython.py`, at a path `@__DIR__` baked in at precompile time — inside
@@ -403,9 +428,16 @@ packages during the build. Five patches are currently applied:
   runs the script from where PythonCall actually is and passes the answer in
   `JULIA_PYTHONCALL_LIB`.
 
-  It was generated from PythonCall v0.9.35 and must be regenerated when PythonCall is
+  When Julia is started from Python (juliacall sets `__JULIA_PYTHONCALL_EMBEDDED_LIBPTR__`,
+  which PythonCall itself uses to detect this), PythonCall uses the Python it runs in, and
+  `__init__` skips both functions: otherwise the bundled `libpython3.12` was loaded into the
+  Python process as a second Python library (macOS, Python 3.12: no failure seen, but two
+  libpythons in one process are not safe, e.g. with Linux's flat symbol namespace).
+
+  It was generated from PythonCall v0.9.37 and must be regenerated when PythonCall is
   upgraded: copy `src/C/C.jl` from the new version and re-apply the block after the
-  `include`s along with the two calls in `__init__`.
+  `include`s along with the two calls in `__init__`, inside their check for
+  `__JULIA_PYTHONCALL_EMBEDDED_LIBPTR__`.
 
 - `meta/patches/IJulia/deps/deps.jl` — IJulia refuses to load unless `deps/deps.jl` exists:
   `src/IJulia.jl` aborts with `IJulia not properly installed. Please run Pkg.build("IJulia")`.
