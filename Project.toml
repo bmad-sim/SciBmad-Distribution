@@ -1,6 +1,6 @@
 name = "SciBmadDistribution"
-authors = ["The SciBmad Team"]
 version = "26.11.24"
+authors = ["The SciBmad Team"]
 
 [deps]
 ADTypes = "47edcb42-4c32-4615-8424-f2b9edc5f35b"
@@ -46,6 +46,9 @@ TPSAInterface = "575459ea-959c-4603-9b15-d63fb6693033"
 Turing = "fce5fe82-541a-59a6-adf8-730c64b5f9a0"
 TypedTables = "9d95f2ec-7b3d-5a63-8d20-e2491e220bb9"
 WGLMakie = "276b4fcb-3e11-5398-bf8b-a0c2d153d008"
+
+[sources]
+SciBmad = {rev = "main", url = "https://github.com/bmad-sim/SciBmad.jl"}
 
 [compat]
 IJulia = "1.34"
